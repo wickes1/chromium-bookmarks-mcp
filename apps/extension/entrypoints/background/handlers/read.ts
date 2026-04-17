@@ -70,15 +70,44 @@ function flattenBookmarks(nodes: chrome.bookmarks.BookmarkTreeNode[], result: ch
   return result;
 }
 
+// Helper: trim tree to a max depth to prevent huge responses
+function trimToDepth(nodes: chrome.bookmarks.BookmarkTreeNode[], maxDepth: number, currentDepth: number = 0): unknown[] {
+  return nodes.map(node => {
+    const trimmed: Record<string, unknown> = {
+      id: node.id,
+      title: node.title,
+      url: node.url,
+      parentId: node.parentId,
+      index: node.index,
+      dateAdded: node.dateAdded,
+    };
+    if (node.children) {
+      if (currentDepth < maxDepth) {
+        trimmed.children = trimToDepth(node.children, maxDepth, currentDepth + 1);
+      } else {
+        trimmed.childCount = node.children.length;
+        trimmed.children = undefined;
+      }
+    }
+    return trimmed;
+  });
+}
+
 // --- Tool: bookmark_get_tree ---
 export async function handleGetTree(args: Record<string, unknown>): Promise<ToolCallResponse> {
   const folderId = args.folder_id as string | undefined;
+  const depth = args.depth as number | undefined;
 
   let tree: chrome.bookmarks.BookmarkTreeNode[];
   if (folderId) {
     tree = await chrome.bookmarks.getSubTree(folderId);
   } else {
     tree = await chrome.bookmarks.getTree();
+  }
+
+  // Apply depth limit if specified (recommended for large bookmark collections)
+  if (depth !== undefined) {
+    return { status: 'success', data: trimToDepth(tree, depth) };
   }
 
   return { status: 'success', data: tree };
