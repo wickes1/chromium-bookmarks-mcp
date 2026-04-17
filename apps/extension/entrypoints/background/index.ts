@@ -3,6 +3,7 @@ import type { NativeMessage, ToolCallPayload, ToolCallResponse } from '@chromium
 import { handlePing } from './handlers/ping.js';
 import { handleGetTree, handleList, handleSearch, handleGet, handleCount, handleFindDuplicates } from './handlers/read.js';
 import { handleCreate, handleUpdate, handleMove, handleDelete, handleDeleteFolder } from './handlers/write.js';
+import { handleBatchMove, handleMergeFolders, handleDeduplicate, handleBatchDelete } from './handlers/batch.js';
 import { acquireKeepalive, releaseKeepalive } from './keepalive.js';
 
 export default defineBackground(() => {
@@ -95,6 +96,18 @@ export default defineBackground(() => {
             break;
           case 'bookmark_delete_folder':
             response = await handleDeleteFolder(args);
+            break;
+          case 'bookmark_batch_move':
+            response = await handleBatchMove(args);
+            break;
+          case 'bookmark_merge_folders':
+            response = await handleMergeFolders(args);
+            break;
+          case 'bookmark_deduplicate':
+            response = await handleDeduplicate(args);
+            break;
+          case 'bookmark_batch_delete':
+            response = await handleBatchDelete(args);
             break;
           default:
             response = { status: 'error', error: `Unknown tool: ${toolName}` };

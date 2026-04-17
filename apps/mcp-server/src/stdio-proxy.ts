@@ -226,6 +226,48 @@ export async function startStdioProxy(): Promise<void> {
     }),
   );
 
+  // Batch tools
+  registerProxyTool(
+    'bookmark_batch_move',
+    'Batch Move Bookmarks',
+    'Move multiple bookmarks to a target folder at once.',
+    z.object({
+      ids: z.array(z.string()).describe('Array of bookmark IDs to move.'),
+      parent_id: z.string().describe('Target parent folder ID.'),
+    }),
+  );
+
+  registerProxyTool(
+    'bookmark_merge_folders',
+    'Merge Folders',
+    'Merge all contents of source folder into target folder. Optionally deduplicate and delete source.',
+    z.object({
+      source_id: z.string().describe('Source folder ID to merge from.'),
+      target_id: z.string().describe('Target folder ID to merge into.'),
+      delete_source: z.boolean().optional().describe('Delete source folder after merge. Default: false.'),
+      deduplicate: z.boolean().optional().describe('Skip moving bookmarks that already exist in target (by URL). Default: false.'),
+    }),
+  );
+
+  registerProxyTool(
+    'bookmark_deduplicate',
+    'Deduplicate Bookmarks',
+    'Find and remove duplicate bookmarks (same URL) within a folder or globally.',
+    z.object({
+      folder_id: z.string().optional().describe('Scope to a specific folder. Omit for global dedup.'),
+      keep: z.enum(['first', 'last']).optional().describe('Which duplicate to keep. Default: first.'),
+    }),
+  );
+
+  registerProxyTool(
+    'bookmark_batch_delete',
+    'Batch Delete Bookmarks',
+    'Delete multiple bookmarks by their IDs. Cannot delete root folders.',
+    z.object({
+      ids: z.array(z.string()).describe('Array of bookmark IDs to delete.'),
+    }),
+  );
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   process.stderr.write('MCP stdio proxy started.\n');
