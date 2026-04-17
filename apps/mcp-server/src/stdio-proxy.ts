@@ -7,7 +7,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { TOOL_SCHEMAS, DEFAULT_PORT } from '@chromium-bookmarks-mcp/shared';
+import { DEFAULT_PORT } from '@chromium-bookmarks-mcp/shared';
 import type { ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
 
 const HTTP_BASE = `http://127.0.0.1:${DEFAULT_PORT}`;
