@@ -15,12 +15,13 @@ async function getFolderPath(nodeId: string): Promise<string> {
   return parts.join(' > ');
 }
 
-// Helper: enrich a bookmark node with folderPath
+// Helper: enrich a bookmark node with folderPath and type
 async function enrichNode(node: chrome.bookmarks.BookmarkTreeNode): Promise<Record<string, unknown>> {
   const folderPath = node.parentId ? await getFolderPath(node.parentId) : '';
   return {
     id: node.id,
     title: node.title,
+    type: node.url ? 'bookmark' : 'folder',
     url: node.url,
     parentId: node.parentId,
     index: node.index,
@@ -30,6 +31,7 @@ async function enrichNode(node: chrome.bookmarks.BookmarkTreeNode): Promise<Reco
     children: node.children ? node.children.map(c => ({
       id: c.id,
       title: c.title,
+      type: c.url ? 'bookmark' : 'folder',
       url: c.url,
       parentId: c.parentId,
       index: c.index,
@@ -105,9 +107,12 @@ export async function handleGetTree(args: Record<string, unknown>): Promise<Tool
     tree = await chrome.bookmarks.getTree();
   }
 
-  // Apply depth limit if specified (recommended for large bookmark collections)
-  if (depth !== undefined) {
-    return { status: 'success', data: trimToDepth(tree, depth) };
+  // Default depth of 3 to prevent huge responses (5000+ bookmarks = 2.6M chars)
+  // Use depth: 0 for unlimited (not recommended for large collections)
+  const effectiveDepth = depth === 0 ? undefined : (depth ?? 3);
+
+  if (effectiveDepth !== undefined) {
+    return { status: 'success', data: trimToDepth(tree, effectiveDepth) };
   }
 
   return { status: 'success', data: tree };

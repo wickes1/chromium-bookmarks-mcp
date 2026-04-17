@@ -40,6 +40,20 @@ export async function handleBatchMove(args: Record<string, unknown>): Promise<To
   };
 }
 
+// Helper: flatten bookmarks from a tree, excluding a specific subtree by ID
+function flattenBookmarksExcluding(
+  nodes: chrome.bookmarks.BookmarkTreeNode[],
+  excludeId: string,
+): chrome.bookmarks.BookmarkTreeNode[] {
+  const result: chrome.bookmarks.BookmarkTreeNode[] = [];
+  for (const node of nodes) {
+    if (node.id === excludeId) continue; // skip the excluded subtree entirely
+    if (node.url) result.push(node);
+    if (node.children) result.push(...flattenBookmarksExcluding(node.children, excludeId));
+  }
+  return result;
+}
+
 // --- Tool: bookmark_merge_folders ---
 export async function handleMergeFolders(args: Record<string, unknown>): Promise<ToolCallResponse> {
   const sourceId = args.source_id as string;
@@ -51,11 +65,12 @@ export async function handleMergeFolders(args: Record<string, unknown>): Promise
   if (!targetId) return { status: 'error', error: 'target_id is required' };
   if (sourceId === targetId) return { status: 'error', error: 'source_id and target_id must be different' };
 
-  // Get existing URLs in target for dedup
+  // Get existing URLs in target for dedup — EXCLUDE source subtree to prevent
+  // source bookmarks from matching against themselves when source is inside target
   let targetUrls = new Set<string>();
   if (deduplicate) {
     const targetTree = await chrome.bookmarks.getSubTree(targetId);
-    const targetBookmarks = flattenBookmarks(targetTree);
+    const targetBookmarks = flattenBookmarksExcluding(targetTree, sourceId);
     targetUrls = new Set(targetBookmarks.map(b => b.url!).filter(Boolean));
   }
 
@@ -64,10 +79,12 @@ export async function handleMergeFolders(args: Record<string, unknown>): Promise
 
   let moved = 0;
   let duplicatesRemoved = 0;
+  const duplicateDetails: Array<{ id: string; title: string; url: string }> = [];
 
   for (const child of sourceChildren) {
     if (deduplicate && child.url && targetUrls.has(child.url)) {
       // Duplicate — remove from source
+      duplicateDetails.push({ id: child.id, title: child.title, url: child.url });
       await chrome.bookmarks.remove(child.id);
       duplicatesRemoved++;
     } else {
@@ -81,23 +98,26 @@ export async function handleMergeFolders(args: Record<string, unknown>): Promise
   let sourceDeleted = false;
   if (deleteSource) {
     try {
-      // Check if source is now empty
       const remaining = await chrome.bookmarks.getChildren(sourceId);
       if (remaining.length === 0) {
         await chrome.bookmarks.remove(sourceId);
-        sourceDeleted = true;
       } else {
         await chrome.bookmarks.removeTree(sourceId);
-        sourceDeleted = true;
       }
-    } catch (err) {
+      sourceDeleted = true;
+    } catch {
       // Source might be a root folder
     }
   }
 
   return {
     status: 'success',
-    data: { moved, duplicatesRemoved, sourceDeleted },
+    data: {
+      moved,
+      duplicatesRemoved,
+      sourceDeleted,
+      duplicates: duplicateDetails.length > 0 ? duplicateDetails : undefined,
+    },
   };
 }
 
