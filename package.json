@@ -1,0 +1,10 @@
+{
+  "name": "chromium-bookmarks-mcp",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "dev:server": "cd apps/mcp-server && bun run src/index.ts",
+    "build:extension": "cd apps/extension && bun run wxt build",
+    "dev:extension": "cd apps/extension && bun run wxt dev"
+  }
+}

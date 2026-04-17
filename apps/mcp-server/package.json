@@ -1,0 +1,17 @@
+{
+  "name": "chromium-bookmarks-mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "chromium-bookmarks-mcp": "src/index.ts"
+  },
+  "dependencies": {
+    "@chromium-bookmarks-mcp/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "^5.8.0"
+  }
+}
