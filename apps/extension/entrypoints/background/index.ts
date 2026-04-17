@@ -1,6 +1,7 @@
 import { NATIVE_HOST_NAME, NativeMessageType, DEFAULT_PORT } from '@chromium-bookmarks-mcp/shared';
 import type { NativeMessage, ToolCallPayload, ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
 import { handlePing } from './handlers/ping.js';
+import { handleGetTree, handleList, handleSearch, handleGet, handleCount, handleFindDuplicates } from './handlers/read.js';
 import { acquireKeepalive, releaseKeepalive } from './keepalive.js';
 
 export default defineBackground(() => {
@@ -46,7 +47,7 @@ export default defineBackground(() => {
     }, RECONNECT_DELAY_MS);
   }
 
-  function handleNativeMessage(msg: NativeMessage): void {
+  async function handleNativeMessage(msg: NativeMessage): Promise<void> {
     if (msg.type === NativeMessageType.SERVER_STARTED) {
       console.log('[BM-MCP] HTTP server started on port', (msg.payload as { port: number }).port);
       return;
@@ -60,6 +61,24 @@ export default defineBackground(() => {
         switch (toolName) {
           case 'ping':
             response = handlePing();
+            break;
+          case 'bookmark_get_tree':
+            response = await handleGetTree(args);
+            break;
+          case 'bookmark_list':
+            response = await handleList(args);
+            break;
+          case 'bookmark_search':
+            response = await handleSearch(args);
+            break;
+          case 'bookmark_get':
+            response = await handleGet(args);
+            break;
+          case 'bookmark_count':
+            response = await handleCount(args);
+            break;
+          case 'bookmark_find_duplicates':
+            response = await handleFindDuplicates(args);
             break;
           default:
             response = { status: 'error', error: `Unknown tool: ${toolName}` };
