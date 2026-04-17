@@ -2,6 +2,7 @@ import { NATIVE_HOST_NAME, NativeMessageType, DEFAULT_PORT } from '@chromium-boo
 import type { NativeMessage, ToolCallPayload, ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
 import { handlePing } from './handlers/ping.js';
 import { handleGetTree, handleList, handleSearch, handleGet, handleCount, handleFindDuplicates } from './handlers/read.js';
+import { handleCreate, handleUpdate, handleMove, handleDelete, handleDeleteFolder } from './handlers/write.js';
 import { acquireKeepalive, releaseKeepalive } from './keepalive.js';
 
 export default defineBackground(() => {
@@ -79,6 +80,21 @@ export default defineBackground(() => {
             break;
           case 'bookmark_find_duplicates':
             response = await handleFindDuplicates(args);
+            break;
+          case 'bookmark_create':
+            response = await handleCreate(args);
+            break;
+          case 'bookmark_update':
+            response = await handleUpdate(args);
+            break;
+          case 'bookmark_move':
+            response = await handleMove(args);
+            break;
+          case 'bookmark_delete':
+            response = await handleDelete(args);
+            break;
+          case 'bookmark_delete_folder':
+            response = await handleDeleteFolder(args);
             break;
           default:
             response = { status: 'error', error: `Unknown tool: ${toolName}` };

@@ -170,6 +170,62 @@ export async function startStdioProxy(): Promise<void> {
     }),
   );
 
+  // Write tools
+  registerProxyTool(
+    'bookmark_create',
+    'Create Bookmark',
+    'Create a new bookmark or folder. Omit url to create a folder. Set create_parents: true with parent_path to auto-create nested folders.',
+    z.object({
+      title: z.string().describe('Title of the bookmark or folder.'),
+      url: z.string().optional().describe('URL for a bookmark. Omit to create a folder.'),
+      parent_id: z.string().optional().describe('Parent folder ID. Default: Bookmarks Bar (1).'),
+      parent_path: z.string().optional().describe('Parent folder path like "Tech > AI". Used with create_parents.'),
+      create_parents: z.boolean().optional().describe('Auto-create parent folders from parent_path if they don\'t exist.'),
+      index: z.number().optional().describe('Position within the parent folder.'),
+    }),
+  );
+
+  registerProxyTool(
+    'bookmark_update',
+    'Update Bookmark',
+    'Update the title or URL of an existing bookmark or folder.',
+    z.object({
+      id: z.string().describe('Bookmark or folder ID to update.'),
+      title: z.string().optional().describe('New title.'),
+      url: z.string().optional().describe('New URL (bookmarks only).'),
+    }),
+  );
+
+  registerProxyTool(
+    'bookmark_move',
+    'Move Bookmark',
+    'Move a bookmark or folder to a different parent folder.',
+    z.object({
+      id: z.string().describe('Bookmark or folder ID to move.'),
+      parent_id: z.string().describe('Target parent folder ID.'),
+      index: z.number().optional().describe('Position within the target folder.'),
+    }),
+  );
+
+  registerProxyTool(
+    'bookmark_delete',
+    'Delete Bookmark',
+    'Delete a single bookmark by ID. Cannot delete root folders.',
+    z.object({
+      id: z.string().describe('Bookmark ID to delete.'),
+    }),
+  );
+
+  registerProxyTool(
+    'bookmark_delete_folder',
+    'Delete Folder',
+    'Delete a folder and ALL its contents. Requires confirm: true as a safety gate.',
+    z.object({
+      id: z.string().describe('Folder ID to delete.'),
+      confirm: z.boolean().describe('Must be true to confirm deletion of folder and all contents.'),
+    }),
+  );
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   process.stderr.write('MCP stdio proxy started.\n');
