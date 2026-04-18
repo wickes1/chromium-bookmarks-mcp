@@ -77,10 +77,10 @@ export async function startStdioProxy(): Promise<void> {
   registerProxyTool(
     'bookmark_get_tree',
     'Get Bookmark Tree',
-    'Returns the bookmark tree structure. Default depth is 3 to prevent huge responses. Use depth: 0 for unlimited (not recommended for large collections). Use folder_id to get a subtree.',
+    'Returns the bookmark tree structure. Default depth is 2 to stay within MCP token limits. Use higher depth for more detail, or depth: 0 for unlimited. Use folder_id to get a subtree.',
     z.object({
       folder_id: z.string().optional().describe('Folder ID to get subtree of. Omit for full tree.'),
-      depth: z.number().optional().describe('Max depth to return (default: 3). Folders beyond this show childCount instead of children. Use 0 for unlimited.'),
+      depth: z.number().optional().describe('Max depth to return (default: 2). Folders beyond this show childCount instead of children. Use 0 for unlimited.'),
     }),
   );
 

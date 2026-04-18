@@ -100,8 +100,8 @@ export async function handleGetTree(args: Record<string, unknown>): Promise<Tool
   const depth = args.depth as number | undefined;
   const tree = await getTreeOrSubtree(folderId);
 
-  // Default depth 3 to prevent huge responses. Use depth: 0 for unlimited.
-  const effectiveDepth = depth === 0 ? undefined : (depth ?? 3);
+  // Default depth 2 to keep response under MCP token limits. Use depth: 0 for unlimited.
+  const effectiveDepth = depth === 0 ? undefined : (depth ?? 2);
   if (effectiveDepth !== undefined) {
     return { status: 'success', data: trimToDepth(tree, effectiveDepth) };
   }
