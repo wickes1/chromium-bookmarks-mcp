@@ -1,14 +1,5 @@
 import type { ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
-
-// Helper: flatten all bookmark nodes recursively (same as in read.ts)
-function flattenBookmarks(nodes: chrome.bookmarks.BookmarkTreeNode[]): chrome.bookmarks.BookmarkTreeNode[] {
-  const result: chrome.bookmarks.BookmarkTreeNode[] = [];
-  for (const node of nodes) {
-    if (node.url) result.push(node);
-    if (node.children) result.push(...flattenBookmarks(node.children));
-  }
-  return result;
-}
+import { flattenBookmarks } from './read.js';
 
 // --- Tool: bookmark_batch_move ---
 export async function handleBatchMove(args: Record<string, unknown>): Promise<ToolCallResponse> {
@@ -35,7 +26,7 @@ export async function handleBatchMove(args: Record<string, unknown>): Promise<To
   }
 
   return {
-    status: errors.length === 0 ? 'success' : 'error',
+    status: moved > 0 ? 'success' : 'error',
     data: { moved, failed: errors.length, errors: errors.length > 0 ? errors : undefined },
   };
 }
@@ -205,7 +196,7 @@ export async function handleBatchDelete(args: Record<string, unknown>): Promise<
   }
 
   return {
-    status: errors.length === 0 && skipped === 0 ? 'success' : 'error',
+    status: deleted > 0 ? 'success' : 'error',
     data: {
       deleted,
       failed: errors.length,

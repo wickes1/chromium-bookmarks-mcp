@@ -100,9 +100,18 @@ function startHttpServer(config?: { port?: number }): void {
       }
 
       if (url.pathname === '/call-tool' && req.method === 'POST') {
-        const body = await req.json() as { toolName: string; args: Record<string, unknown> };
+        let body: { toolName?: string; args?: Record<string, unknown> };
         try {
-          const result = await callExtensionTool(body.toolName, body.args);
+          body = await req.json();
+        } catch {
+          return Response.json({ status: 'error', error: 'Invalid JSON body' }, { status: 400 });
+        }
+        if (!body.toolName || typeof body.toolName !== 'string') {
+          return Response.json({ status: 'error', error: 'toolName (string) is required' }, { status: 400 });
+        }
+        const args = (body.args && typeof body.args === 'object') ? body.args : {};
+        try {
+          const result = await callExtensionTool(body.toolName, args);
           return Response.json(result);
         } catch (err) {
           return Response.json(

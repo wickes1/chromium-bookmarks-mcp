@@ -60,7 +60,7 @@ function countNodes(nodes: chrome.bookmarks.BookmarkTreeNode[]): { total: number
 }
 
 // Helper: flatten all bookmark nodes recursively
-function flattenBookmarks(nodes: chrome.bookmarks.BookmarkTreeNode[], result: chrome.bookmarks.BookmarkTreeNode[] = []): chrome.bookmarks.BookmarkTreeNode[] {
+export function flattenBookmarks(nodes: chrome.bookmarks.BookmarkTreeNode[], result: chrome.bookmarks.BookmarkTreeNode[] = []): chrome.bookmarks.BookmarkTreeNode[] {
   for (const node of nodes) {
     if (node.url) {
       result.push(node);
