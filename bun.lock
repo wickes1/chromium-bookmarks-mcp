@@ -16,7 +16,7 @@
       },
     },
     "apps/mcp-server": {
-      "name": "@chromium-bookmarks-mcp/mcp-server",
+      "name": "chromium-bookmarks-mcp",
       "version": "0.1.0",
       "bin": {
         "chromium-bookmarks-mcp": "src/index.ts",
@@ -54,8 +54,6 @@
     "@babel/types": ["@babel/types@7.29.0", "", { "dependencies": { "@babel/helper-string-parser": "^7.27.1", "@babel/helper-validator-identifier": "^7.28.5" } }, "sha512-LwdZHpScM4Qz8Xw2iKSzS+cfglZzJGvofQICy7W7v4caru4EaAmyUuO6BGrbyQ2mYV11W0U8j5mBhd14dd3B0A=="],
 
     "@chromium-bookmarks-mcp/extension": ["@chromium-bookmarks-mcp/extension@workspace:apps/extension"],
-
-    "@chromium-bookmarks-mcp/mcp-server": ["@chromium-bookmarks-mcp/mcp-server@workspace:apps/mcp-server"],
 
     "@chromium-bookmarks-mcp/shared": ["@chromium-bookmarks-mcp/shared@workspace:packages/shared"],
 
@@ -270,6 +268,8 @@
     "chokidar": ["chokidar@5.0.0", "", { "dependencies": { "readdirp": "^5.0.0" } }, "sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw=="],
 
     "chrome-launcher": ["chrome-launcher@1.2.0", "", { "dependencies": { "@types/node": "*", "escape-string-regexp": "^4.0.0", "is-wsl": "^2.2.0", "lighthouse-logger": "^2.0.1" }, "bin": { "print-chrome-path": "bin/print-chrome-path.cjs" } }, "sha512-JbuGuBNss258bvGil7FT4HKdC3SC2K7UAEUqiPy3ACS3Yxo3hAW6bvFpCu2HsIJLgTqxgEX6BkujvzZfLpUD0Q=="],
+
+    "chromium-bookmarks-mcp": ["chromium-bookmarks-mcp@workspace:apps/mcp-server"],
 
     "ci-info": ["ci-info@4.4.0", "", {}, "sha512-77PSwercCZU2Fc4sX94eF8k8Pxte6JAwL4/ICZLFjJLqegs7kCuAsqqj/70NQF6TvDpgFjkubQB2FW2ZZddvQg=="],
 

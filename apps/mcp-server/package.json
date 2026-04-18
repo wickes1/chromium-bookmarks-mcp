@@ -1,9 +1,36 @@
 {
-  "name": "@chromium-bookmarks-mcp/mcp-server",
+  "name": "chromium-bookmarks-mcp",
   "version": "0.1.0",
+  "description": "MCP server for real-time Chromium browser bookmark management. Works with Brave, Chrome, Edge, Arc.",
   "type": "module",
+  "license": "MIT",
+  "author": "Wickes1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Wickes1/chromium-bookmarks-mcp"
+  },
+  "keywords": [
+    "mcp",
+    "bookmarks",
+    "chrome",
+    "brave",
+    "chromium",
+    "model-context-protocol",
+    "ai-agent",
+    "browser-extension",
+    "claude"
+  ],
   "bin": {
     "chromium-bookmarks-mcp": "src/index.ts"
+  },
+  "files": [
+    "src/**/*.ts",
+    "bin/**",
+    "package.json",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "bun run src/index.ts register || true"
   },
   "dependencies": {
     "@chromium-bookmarks-mcp/shared": "workspace:*",
