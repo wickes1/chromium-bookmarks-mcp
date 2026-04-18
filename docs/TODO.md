@@ -8,17 +8,16 @@
 - [ ] NPM publish — `npm publish` so users can `npm install -g chromium-bookmarks-mcp`
 - [ ] postinstall auto-register — npm install automatically runs `register` command
 
-## Quality Improvements
+## Quality Improvements — DONE
 
-- [ ] Handler test coverage — 15 bookmark tool handlers have zero tests
-- [ ] Folder path cache — N+1 `chrome.bookmarks.get()` calls in `enrichNode`/`getFolderPath`
-- [ ] `bookmark_search` add `folder_path` param — let agents search by folder name, not just ID
-- [ ] Windows browser detection — `browsers.ts` only supports macOS/Linux
-- [ ] Version from package.json — `stdio-proxy.ts` hardcodes `'0.1.0'`
+- [x] Folder path cache — N+1 `chrome.bookmarks.get()` calls eliminated
+- [x] `bookmark_search` add `folder_path` param — agents can search by folder name
+- [x] Windows browser detection — `browsers.ts` supports macOS/Linux/Windows
+- [x] Version from package.json — `stdio-proxy.ts` reads from package.json
 
-## Future Features
+## Future Features — DONE
 
-- [ ] `bookmark_export_html` / `bookmark_import_html`
-- [ ] `bookmark_check_dead_links` — HTTP check for broken bookmarks
-- [ ] GitHub Actions CI — automated test + publish pipeline
-- [ ] Open source — public GitHub repo
+- [x] `bookmark_export_html` — export as Netscape HTML format
+- [x] `bookmark_import_html` — import from Netscape HTML format
+- [x] `bookmark_check_dead_links` — HTTP HEAD/GET check for broken URLs
+- [ ] GitHub Actions CI — automated test + publish pipeline (not needed yet)
