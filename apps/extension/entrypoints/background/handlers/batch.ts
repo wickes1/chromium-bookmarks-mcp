@@ -1,5 +1,6 @@
+import { ROOT_FOLDER_IDS } from '@chromium-bookmarks-mcp/shared';
 import type { ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
-import { flattenBookmarks } from './read.js';
+import { flattenBookmarks, getTreeOrSubtree } from './read.js';
 
 // --- Tool: bookmark_batch_move ---
 export async function handleBatchMove(args: Record<string, unknown>): Promise<ToolCallResponse> {
@@ -117,13 +118,7 @@ export async function handleDeduplicate(args: Record<string, unknown>): Promise<
   const folderId = args.folder_id as string | undefined;
   const keep = (args.keep as string) || 'first';
 
-  let tree: chrome.bookmarks.BookmarkTreeNode[];
-  if (folderId) {
-    tree = await chrome.bookmarks.getSubTree(folderId);
-  } else {
-    tree = await chrome.bookmarks.getTree();
-  }
-
+  const tree = await getTreeOrSubtree(folderId);
   const allBookmarks = flattenBookmarks(tree);
 
   // Group by URL
@@ -178,9 +173,7 @@ export async function handleBatchDelete(args: Record<string, unknown>): Promise<
     return { status: 'error', error: 'ids array is required and must not be empty' };
   }
 
-  // Prevent deleting root folders
-  const rootIds = ['0', '1', '2'];
-  const safeIds = ids.filter(id => !rootIds.includes(id));
+  const safeIds = ids.filter(id => !ROOT_FOLDER_IDS.includes(id));
   const skipped = ids.length - safeIds.length;
 
   let deleted = 0;

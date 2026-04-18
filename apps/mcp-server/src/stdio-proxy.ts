@@ -45,36 +45,7 @@ export async function startStdioProxy(): Promise<void> {
     { instructions: 'Manage Chromium browser bookmarks. Requires the Chromium Bookmarks MCP extension to be installed and the browser to be open.' }
   );
 
-  // Register the ping tool
-  server.registerTool(
-    'ping',
-    {
-      title: 'Ping',
-      description: 'Check if the browser extension is connected and responsive.',
-      inputSchema: z.object({}),
-    },
-    async () => {
-      const connected = await checkConnection();
-      if (!connected) {
-        return {
-          content: [{ type: 'text' as const, text: 'Extension not connected. Please open your browser and ensure the Chromium Bookmarks MCP extension is installed.' }],
-          isError: true,
-        };
-      }
-
-      try {
-        const result = await callNativeHost('ping', {});
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result.data ?? result) }],
-        };
-      } catch (err) {
-        return {
-          content: [{ type: 'text' as const, text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
-      }
-    }
-  );
+  const NOT_CONNECTED_MSG = 'Extension not connected. Please open your browser and ensure the Chromium Bookmarks MCP extension is installed.';
 
   // Helper: register a tool that proxies to the native host
   function registerProxyTool(
@@ -86,30 +57,22 @@ export async function startStdioProxy(): Promise<void> {
     server.registerTool(name, { title, description, inputSchema }, async (args) => {
       const connected = await checkConnection();
       if (!connected) {
-        return {
-          content: [{ type: 'text' as const, text: 'Extension not connected. Please open your browser and ensure the Chromium Bookmarks MCP extension is installed.' }],
-          isError: true,
-        };
+        return { content: [{ type: 'text' as const, text: NOT_CONNECTED_MSG }], isError: true };
       }
       try {
         const result = await callNativeHost(name, args as Record<string, unknown>);
         if (result.status === 'error') {
-          return {
-            content: [{ type: 'text' as const, text: `Error: ${result.error}` }],
-            isError: true,
-          };
+          return { content: [{ type: 'text' as const, text: `Error: ${result.error}` }], isError: true };
         }
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }],
-        };
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }] };
       } catch (err) {
-        return {
-          content: [{ type: 'text' as const, text: `Error: ${(err as Error).message}` }],
-          isError: true,
-        };
+        return { content: [{ type: 'text' as const, text: `Error: ${(err as Error).message}` }], isError: true };
       }
     });
   }
+
+  // Ping
+  registerProxyTool('ping', 'Ping', 'Check if the browser extension is connected and responsive.', z.object({}));
 
   // Read tools
   registerProxyTool(

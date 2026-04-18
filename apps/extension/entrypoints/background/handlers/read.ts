@@ -1,6 +1,26 @@
 import type { ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
 
-// Helper: compute folder path like "Bookmarks Bar > Tech > AI"
+// --- Shared helpers (exported for use by batch.ts) ---
+
+// Get full tree or subtree by folder ID
+export async function getTreeOrSubtree(folderId?: string): Promise<chrome.bookmarks.BookmarkTreeNode[]> {
+  return folderId
+    ? chrome.bookmarks.getSubTree(folderId)
+    : chrome.bookmarks.getTree();
+}
+
+// Flatten all bookmark nodes recursively (only nodes with URLs)
+export function flattenBookmarks(nodes: chrome.bookmarks.BookmarkTreeNode[], result: chrome.bookmarks.BookmarkTreeNode[] = []): chrome.bookmarks.BookmarkTreeNode[] {
+  for (const node of nodes) {
+    if (node.url) result.push(node);
+    if (node.children) flattenBookmarks(node.children, result);
+  }
+  return result;
+}
+
+// --- Internal helpers ---
+
+// Compute folder path like "Bookmarks Bar > Tech > AI"
 async function getFolderPath(nodeId: string): Promise<string> {
   const parts: string[] = [];
   let currentId = nodeId;
@@ -15,7 +35,7 @@ async function getFolderPath(nodeId: string): Promise<string> {
   return parts.join(' > ');
 }
 
-// Helper: enrich a bookmark node with folderPath and type
+// Enrich a bookmark node with folderPath and type
 async function enrichNode(node: chrome.bookmarks.BookmarkTreeNode): Promise<Record<string, unknown>> {
   const folderPath = node.parentId ? await getFolderPath(node.parentId) : '';
   return {
@@ -40,85 +60,54 @@ async function enrichNode(node: chrome.bookmarks.BookmarkTreeNode): Promise<Reco
   };
 }
 
-// Helper: recursively count bookmarks and folders
+// Recursively count bookmarks and folders
 function countNodes(nodes: chrome.bookmarks.BookmarkTreeNode[]): { total: number; folders: number; bookmarks: number } {
   let total = 0, folders = 0, bookmarks = 0;
   for (const node of nodes) {
     if (node.url) {
-      bookmarks++;
-      total++;
+      bookmarks++; total++;
     } else if (node.children) {
-      folders++;
-      total++;
+      folders++; total++;
       const sub = countNodes(node.children);
-      total += sub.total;
-      folders += sub.folders;
-      bookmarks += sub.bookmarks;
+      total += sub.total; folders += sub.folders; bookmarks += sub.bookmarks;
     }
   }
   return { total, folders, bookmarks };
 }
 
-// Helper: flatten all bookmark nodes recursively
-export function flattenBookmarks(nodes: chrome.bookmarks.BookmarkTreeNode[], result: chrome.bookmarks.BookmarkTreeNode[] = []): chrome.bookmarks.BookmarkTreeNode[] {
-  for (const node of nodes) {
-    if (node.url) {
-      result.push(node);
-    }
-    if (node.children) {
-      flattenBookmarks(node.children, result);
-    }
-  }
-  return result;
-}
-
-// Helper: trim tree to a max depth to prevent huge responses
+// Trim tree to a max depth to prevent huge responses
 function trimToDepth(nodes: chrome.bookmarks.BookmarkTreeNode[], maxDepth: number, currentDepth: number = 0): unknown[] {
   return nodes.map(node => {
     const trimmed: Record<string, unknown> = {
-      id: node.id,
-      title: node.title,
-      url: node.url,
-      parentId: node.parentId,
-      index: node.index,
-      dateAdded: node.dateAdded,
+      id: node.id, title: node.title, url: node.url,
+      parentId: node.parentId, index: node.index, dateAdded: node.dateAdded,
     };
     if (node.children) {
       if (currentDepth < maxDepth) {
         trimmed.children = trimToDepth(node.children, maxDepth, currentDepth + 1);
       } else {
         trimmed.childCount = node.children.length;
-        trimmed.children = undefined;
       }
     }
     return trimmed;
   });
 }
 
-// --- Tool: bookmark_get_tree ---
+// --- Tool handlers ---
+
 export async function handleGetTree(args: Record<string, unknown>): Promise<ToolCallResponse> {
   const folderId = args.folder_id as string | undefined;
   const depth = args.depth as number | undefined;
+  const tree = await getTreeOrSubtree(folderId);
 
-  let tree: chrome.bookmarks.BookmarkTreeNode[];
-  if (folderId) {
-    tree = await chrome.bookmarks.getSubTree(folderId);
-  } else {
-    tree = await chrome.bookmarks.getTree();
-  }
-
-  // Default depth of 3 to prevent huge responses (5000+ bookmarks = 2.6M chars)
-  // Use depth: 0 for unlimited (not recommended for large collections)
+  // Default depth 3 to prevent huge responses. Use depth: 0 for unlimited.
   const effectiveDepth = depth === 0 ? undefined : (depth ?? 3);
-
   if (effectiveDepth !== undefined) {
     return { status: 'success', data: trimToDepth(tree, effectiveDepth) };
   }
-
   return { status: 'success', data: tree };
 }
 
-// --- Tool: bookmark_list ---
 export async function handleList(args: Record<string, unknown>): Promise<ToolCallResponse> {
   const folderId = (args.folder_id as string) || '0';
   const limit = (args.limit as number) || 100;
@@ -126,32 +115,23 @@ export async function handleList(args: Record<string, unknown>): Promise<ToolCal
 
   const children = await chrome.bookmarks.getChildren(folderId);
   const sliced = children.slice(offset, offset + limit);
-
   const enriched = await Promise.all(sliced.map(enrichNode));
 
   return {
     status: 'success',
-    data: {
-      items: enriched,
-      total: children.length,
-      hasMore: offset + limit < children.length,
-    },
+    data: { items: enriched, total: children.length, hasMore: offset + limit < children.length },
   };
 }
 
-// --- Tool: bookmark_search ---
 export async function handleSearch(args: Record<string, unknown>): Promise<ToolCallResponse> {
   const query = args.query as string;
   const folderId = args.folder_id as string | undefined;
   const limit = (args.limit as number) || 50;
 
-  if (!query) {
-    return { status: 'error', error: 'query is required' };
-  }
+  if (!query) return { status: 'error', error: 'query is required' };
 
   let results = await chrome.bookmarks.search(query);
 
-  // If folder_id specified, filter to only bookmarks under that folder
   if (folderId) {
     const subtree = await chrome.bookmarks.getSubTree(folderId);
     const subtreeIds = new Set<string>();
@@ -170,62 +150,33 @@ export async function handleSearch(args: Record<string, unknown>): Promise<ToolC
 
   return {
     status: 'success',
-    data: {
-      items: enriched,
-      total: results.length,
-      returned: sliced.length,
-    },
+    data: { items: enriched, total: results.length, returned: sliced.length },
   };
 }
 
-// --- Tool: bookmark_get ---
 export async function handleGet(args: Record<string, unknown>): Promise<ToolCallResponse> {
   const id = args.id as string;
-  if (!id) {
-    return { status: 'error', error: 'id is required' };
-  }
+  if (!id) return { status: 'error', error: 'id is required' };
 
   try {
     const nodes = await chrome.bookmarks.get(id);
-    if (nodes.length === 0) {
-      return { status: 'error', error: `Bookmark not found: ${id}` };
-    }
-    const enriched = await enrichNode(nodes[0]);
-    return { status: 'success', data: enriched };
+    if (nodes.length === 0) return { status: 'error', error: `Bookmark not found: ${id}` };
+    return { status: 'success', data: await enrichNode(nodes[0]) };
   } catch {
     return { status: 'error', error: `Bookmark not found: ${id}` };
   }
 }
 
-// --- Tool: bookmark_count ---
 export async function handleCount(args: Record<string, unknown>): Promise<ToolCallResponse> {
-  const folderId = args.folder_id as string | undefined;
-
-  let tree: chrome.bookmarks.BookmarkTreeNode[];
-  if (folderId) {
-    tree = await chrome.bookmarks.getSubTree(folderId);
-  } else {
-    tree = await chrome.bookmarks.getTree();
-  }
-
+  const tree = await getTreeOrSubtree(args.folder_id as string | undefined);
   const stats = countNodes(tree[0]?.children || tree);
   return { status: 'success', data: stats };
 }
 
-// --- Tool: bookmark_find_duplicates ---
 export async function handleFindDuplicates(args: Record<string, unknown>): Promise<ToolCallResponse> {
-  const folderId = args.folder_id as string | undefined;
-
-  let tree: chrome.bookmarks.BookmarkTreeNode[];
-  if (folderId) {
-    tree = await chrome.bookmarks.getSubTree(folderId);
-  } else {
-    tree = await chrome.bookmarks.getTree();
-  }
-
+  const tree = await getTreeOrSubtree(args.folder_id as string | undefined);
   const allBookmarks = flattenBookmarks(tree);
 
-  // Group by URL
   const urlMap = new Map<string, chrome.bookmarks.BookmarkTreeNode[]>();
   for (const bm of allBookmarks) {
     if (!bm.url) continue;
@@ -234,7 +185,6 @@ export async function handleFindDuplicates(args: Record<string, unknown>): Promi
     urlMap.set(bm.url, existing);
   }
 
-  // Filter to only duplicates
   const duplicates: Array<{ url: string; count: number; bookmarks: Array<Record<string, unknown>> }> = [];
   for (const [url, nodes] of urlMap) {
     if (nodes.length > 1) {

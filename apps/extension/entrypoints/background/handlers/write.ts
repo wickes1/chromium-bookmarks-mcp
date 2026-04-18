@@ -1,3 +1,4 @@
+import { ROOT_FOLDER_IDS } from '@chromium-bookmarks-mcp/shared';
 import type { ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
 
 // Helper: create nested folders from a path like "Tech > AI > LLM"
@@ -108,7 +109,7 @@ export async function handleDelete(args: Record<string, unknown>): Promise<ToolC
   }
 
   // Prevent deleting root folders
-  if (['0', '1', '2'].includes(id)) {
+  if (ROOT_FOLDER_IDS.includes(id)) {
     return { status: 'error', error: 'Cannot delete root bookmark folders' };
   }
 
@@ -136,7 +137,7 @@ export async function handleDeleteFolder(args: Record<string, unknown>): Promise
   }
 
   // Prevent deleting root folders
-  if (['0', '1', '2'].includes(id)) {
+  if (ROOT_FOLDER_IDS.includes(id)) {
     return { status: 'error', error: 'Cannot delete root bookmark folders' };
   }
 
