@@ -8,8 +8,13 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { DEFAULT_PORT } from '@chromium-bookmarks-mcp/shared';
 import type { ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 
 const HTTP_BASE = `http://127.0.0.1:${DEFAULT_PORT}`;
+
+const pkg = JSON.parse(readFileSync(join(dirname(new URL(import.meta.url).pathname), '..', 'package.json'), 'utf-8'));
+const VERSION: string = pkg.version;
 
 async function callNativeHost(toolName: string, args: Record<string, unknown>): Promise<ToolCallResponse> {
   const res = await fetch(`${HTTP_BASE}/call-tool`, {
@@ -40,7 +45,7 @@ async function checkConnection(): Promise<boolean> {
 
 export async function startStdioProxy(): Promise<void> {
   const server = new McpServer(
-    { name: 'chromium-bookmarks-mcp', version: '0.1.0' },
+    { name: 'chromium-bookmarks-mcp', version: VERSION },
     { instructions: 'Manage Chromium browser bookmarks. Requires the Chromium Bookmarks MCP extension to be installed and the browser to be open.' }
   );
 
