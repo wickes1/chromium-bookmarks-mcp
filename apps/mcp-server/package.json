@@ -1,5 +1,5 @@
 {
-  "name": "chromium-bookmarks-mcp",
+  "name": "@chromium-bookmarks-mcp/mcp-server",
   "version": "0.1.0",
   "type": "module",
   "bin": {

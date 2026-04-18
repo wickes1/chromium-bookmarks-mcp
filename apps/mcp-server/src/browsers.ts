@@ -1,3 +1,4 @@
+/** Detect installed Chromium browsers and their NativeMessagingHosts paths. */
 import { join } from 'node:path';
 import { homedir, platform } from 'node:os';
 import { existsSync } from 'node:fs';

@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 /**
  * Process C — MCP Stdio Proxy.
  * Spawned by Claude Code. Receives MCP tool calls via stdin (JSON-RPC),

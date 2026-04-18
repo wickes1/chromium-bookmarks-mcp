@@ -1,3 +1,4 @@
+/** Extension service worker — manages native messaging connection and tool dispatch. */
 import { NATIVE_HOST_NAME, NativeMessageType, DEFAULT_PORT } from '@chromium-bookmarks-mcp/shared';
 import type { NativeMessage, ToolCallPayload, ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
 import { handlePing } from './handlers/ping.js';
