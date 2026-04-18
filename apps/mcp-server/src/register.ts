@@ -6,6 +6,11 @@ import { getInstalledBrowsers } from './browsers.js';
 
 function getNativeHostPath(): string {
   const thisDir = dirname(new URL(import.meta.url).pathname);
+  // TODO(windows): On Windows, .sh scripts cannot be executed directly by Chrome's
+  // native messaging host launcher. Replace run_host.sh with a run_host.cmd (or
+  // run_host.bat) wrapper that invokes bun/node, and return the .cmd path when
+  // process.platform === 'win32'. For now we keep pointing at the .sh file so
+  // the manifest structure is at least correct when developing cross-platform.
   return join(thisDir, '..', 'bin', 'run_host.sh');
 }
 

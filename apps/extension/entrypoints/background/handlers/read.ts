@@ -20,19 +20,52 @@ export function flattenBookmarks(nodes: chrome.bookmarks.BookmarkTreeNode[], res
 
 // --- Internal helpers ---
 
+// Module-level cache: nodeId → resolved folder path string.
+// Valid for the lifetime of the process session. Bookmarks rarely move mid-session,
+// so a persistent cache is acceptable. Call clearFolderPathCache() before batch
+// operations if freshness is required.
+const _folderPathCache = new Map<string, string>();
+
+export function clearFolderPathCache(): void {
+  _folderPathCache.clear();
+}
+
 // Compute folder path like "Bookmarks Bar > Tech > AI"
+// Caches each intermediate node so sibling bookmarks in the same folder
+// only pay the chrome.bookmarks.get() cost once.
 async function getFolderPath(nodeId: string): Promise<string> {
-  const parts: string[] = [];
+  if (_folderPathCache.has(nodeId)) {
+    return _folderPathCache.get(nodeId)!;
+  }
+
+  // Walk up the parent chain, collecting {id, title, parentId} for every
+  // node that isn't yet cached. We stop as soon as we hit a cached ancestor
+  // or reach the root.
+  type NodeInfo = { id: string; title: string; parentId: string };
+  const uncached: NodeInfo[] = [];
   let currentId = nodeId;
 
   while (currentId && currentId !== '0') {
+    if (_folderPathCache.has(currentId)) break;
     const nodes = await chrome.bookmarks.get(currentId);
     if (nodes.length === 0) break;
-    parts.unshift(nodes[0].title || 'Root');
-    currentId = nodes[0].parentId || '';
+    const n = nodes[0];
+    uncached.push({ id: currentId, title: n.title || 'Root', parentId: n.parentId || '' });
+    currentId = n.parentId || '';
   }
 
-  return parts.join(' > ');
+  // `uncached` is ordered from requested node up to the highest uncached ancestor.
+  // Reverse to walk top-down so each parent path is resolved before its children.
+  for (let i = uncached.length - 1; i >= 0; i--) {
+    const { id, title, parentId } = uncached[i];
+    const parentPath = parentId && parentId !== '0'
+      ? (_folderPathCache.get(parentId) ?? '')
+      : '';
+    const path = parentPath ? `${parentPath} > ${title}` : title;
+    _folderPathCache.set(id, path);
+  }
+
+  return _folderPathCache.get(nodeId) ?? '';
 }
 
 // Enrich a bookmark node with folderPath and type

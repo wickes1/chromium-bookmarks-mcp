@@ -30,6 +30,26 @@ function linuxBrowsers(): BrowserInfo[] {
   ];
 }
 
+function windowsBrowsers(): BrowserInfo[] {
+  // On Windows, native messaging host manifests are registered via the file system under LOCALAPPDATA.
+  const localAppData =
+    process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local');
+  return [
+    {
+      name: 'Chrome',
+      nativeHostDir: join(localAppData, 'Google', 'Chrome', 'User Data', 'NativeMessagingHosts'),
+    },
+    {
+      name: 'Brave',
+      nativeHostDir: join(localAppData, 'BraveSoftware', 'Brave-Browser', 'User Data', 'NativeMessagingHosts'),
+    },
+    {
+      name: 'Edge',
+      nativeHostDir: join(localAppData, 'Microsoft', 'Edge', 'User Data', 'NativeMessagingHosts'),
+    },
+  ];
+}
+
 export function getInstalledBrowsers(): BrowserInfo[] {
   const os = platform();
   let browsers: BrowserInfo[];
@@ -38,8 +58,10 @@ export function getInstalledBrowsers(): BrowserInfo[] {
     browsers = macBrowsers();
   } else if (os === 'linux') {
     browsers = linuxBrowsers();
+  } else if (os === 'win32') {
+    browsers = windowsBrowsers();
   } else {
-    console.error('Windows native host registration not yet supported. Use manual registration.');
+    console.error(`Unsupported platform: ${os}. Native host registration not supported.`);
     return [];
   }
 
