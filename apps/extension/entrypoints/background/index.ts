@@ -2,8 +2,8 @@
 import { NATIVE_HOST_NAME, NativeMessageType, DEFAULT_PORT } from '@chromium-bookmarks-mcp/shared';
 import type { NativeMessage, ToolCallPayload, ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
 import { handlePing } from './handlers/ping.js';
-import { handleGetTree, handleList, handleSearch, handleGet, handleCount, handleFindDuplicates } from './handlers/read.js';
-import { handleCreate, handleUpdate, handleMove, handleDelete, handleDeleteFolder } from './handlers/write.js';
+import { handleGetTree, handleList, handleSearch, handleGet, handleCount, handleFindDuplicates, handleExportHtml, handleCheckDeadLinks } from './handlers/read.js';
+import { handleCreate, handleUpdate, handleMove, handleDelete, handleDeleteFolder, handleImportHtml } from './handlers/write.js';
 import { handleBatchMove, handleMergeFolders, handleDeduplicate, handleBatchDelete } from './handlers/batch.js';
 import { acquireKeepalive, releaseKeepalive } from './keepalive.js';
 
@@ -109,6 +109,15 @@ export default defineBackground(() => {
             break;
           case 'bookmark_batch_delete':
             response = await handleBatchDelete(args);
+            break;
+          case 'bookmark_export_html':
+            response = await handleExportHtml(args);
+            break;
+          case 'bookmark_import_html':
+            response = await handleImportHtml(args);
+            break;
+          case 'bookmark_check_dead_links':
+            response = await handleCheckDeadLinks(args);
             break;
           default:
             response = { status: 'error', error: `Unknown tool: ${toolName}` };

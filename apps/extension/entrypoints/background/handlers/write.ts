@@ -20,6 +20,72 @@ async function createFolderPath(path: string, rootId: string = '1'): Promise<str
   return parentId;
 }
 
+// --- Tool: bookmark_import_html ---
+export async function handleImportHtml(args: Record<string, unknown>): Promise<ToolCallResponse> {
+  const html = args.html as string;
+  const parentId = args.parent_id as string | undefined;
+  const targetId = parentId || '1'; // default to Bookmarks Bar
+
+  if (!html) return { status: 'error', error: 'html content is required' };
+
+  let created = 0;
+  let folders = 0;
+
+  // Simple state-machine parser for Netscape Bookmark HTML
+  const lines = html.split('\n');
+  const folderStack: string[] = [targetId];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Folder start: <DT><H3 ...>Title</H3>
+    const folderMatch = trimmed.match(/<DT><H3[^>]*>(.*?)<\/H3>/i);
+    if (folderMatch) {
+      const title = decodeHtmlEntities(folderMatch[1]);
+      const folder = await chrome.bookmarks.create({
+        parentId: folderStack[folderStack.length - 1],
+        title,
+      });
+      folderStack.push(folder.id);
+      folders++;
+      continue;
+    }
+
+    // DL start — folder contents begin (folder was already pushed)
+    if (trimmed.match(/^<DL>/i)) continue;
+
+    // DL end — folder contents end, pop folder stack
+    if (trimmed.match(/^<\/DL>/i)) {
+      if (folderStack.length > 1) folderStack.pop();
+      continue;
+    }
+
+    // Bookmark: <DT><A HREF="..." ...>Title</A>
+    const bookmarkMatch = trimmed.match(/<DT><A\s+HREF="([^"]*)"[^>]*>(.*?)<\/A>/i);
+    if (bookmarkMatch) {
+      const url = decodeHtmlEntities(bookmarkMatch[1]);
+      const title = decodeHtmlEntities(bookmarkMatch[2]);
+      await chrome.bookmarks.create({
+        parentId: folderStack[folderStack.length - 1],
+        title,
+        url,
+      });
+      created++;
+    }
+  }
+
+  return { status: 'success', data: { created, folders } };
+}
+
+function decodeHtmlEntities(str: string): string {
+  return str
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
 // --- Tool: bookmark_create ---
 export async function handleCreate(args: Record<string, unknown>): Promise<ToolCallResponse> {
   const parentId = args.parent_id as string | undefined;

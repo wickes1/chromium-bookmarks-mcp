@@ -232,6 +232,120 @@ export async function handleCount(args: Record<string, unknown>): Promise<ToolCa
   return { status: 'success', data: stats };
 }
 
+export async function handleExportHtml(args: Record<string, unknown>): Promise<ToolCallResponse> {
+  const folderId = args.folder_id as string | undefined;
+  const tree = await getTreeOrSubtree(folderId);
+
+  function renderNode(node: chrome.bookmarks.BookmarkTreeNode, indent: number): string {
+    const prefix = '    '.repeat(indent);
+    if (node.url) {
+      const addDate = node.dateAdded ? Math.floor(node.dateAdded / 1000) : '';
+      return `${prefix}<DT><A HREF="${escapeHtml(node.url)}" ADD_DATE="${addDate}">${escapeHtml(node.title)}</A>\n`;
+    }
+    // Folder
+    let html = `${prefix}<DT><H3 ADD_DATE="${node.dateAdded ? Math.floor(node.dateAdded / 1000) : ''}">${escapeHtml(node.title)}</H3>\n`;
+    html += `${prefix}<DL><p>\n`;
+    for (const child of node.children || []) {
+      html += renderNode(child, indent + 1);
+    }
+    html += `${prefix}</DL><p>\n`;
+    return html;
+  }
+
+  function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  let html = '<!DOCTYPE NETSCAPE-Bookmark-file-1>\n';
+  html += '<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n';
+  html += '<TITLE>Bookmarks</TITLE>\n';
+  html += '<H1>Bookmarks</H1>\n';
+  html += '<DL><p>\n';
+  for (const root of tree) {
+    for (const child of root.children || []) {
+      html += renderNode(child, 1);
+    }
+  }
+  html += '</DL><p>\n';
+
+  return { status: 'success', data: { html, size: html.length } };
+}
+
+export async function handleCheckDeadLinks(args: Record<string, unknown>): Promise<ToolCallResponse> {
+  const folderId = args.folder_id as string | undefined;
+  const limit = (args.limit as number) || 50;
+  const timeoutMs = (args.timeout_ms as number) || 5000;
+
+  const tree = await getTreeOrSubtree(folderId);
+  const allBookmarks = flattenBookmarks(tree);
+
+  // Only check bookmarks with http/https URLs
+  const checkable = allBookmarks
+    .filter(b => b.url && (b.url.startsWith('http://') || b.url.startsWith('https://')))
+    .slice(0, limit);
+
+  const results: Array<{
+    id: string;
+    title: string;
+    url: string;
+    status: 'alive' | 'dead' | 'error';
+    httpStatus?: number;
+    error?: string;
+  }> = [];
+
+  // Check in batches of 5 to avoid overwhelming the network
+  for (let i = 0; i < checkable.length; i += 5) {
+    const batch = checkable.slice(i, i + 5);
+    const checks = batch.map(async (bm) => {
+      try {
+        const res = await fetch(bm.url!, {
+          method: 'HEAD',
+          signal: AbortSignal.timeout(timeoutMs),
+          redirect: 'follow',
+        });
+        if (res.ok) {
+          results.push({ id: bm.id, title: bm.title, url: bm.url!, status: 'alive', httpStatus: res.status });
+        } else {
+          results.push({ id: bm.id, title: bm.title, url: bm.url!, status: 'dead', httpStatus: res.status });
+        }
+      } catch {
+        // Some servers reject HEAD, try GET as fallback
+        try {
+          const res = await fetch(bm.url!, {
+            method: 'GET',
+            signal: AbortSignal.timeout(timeoutMs),
+            redirect: 'follow',
+          });
+          if (res.ok) {
+            results.push({ id: bm.id, title: bm.title, url: bm.url!, status: 'alive', httpStatus: res.status });
+          } else {
+            results.push({ id: bm.id, title: bm.title, url: bm.url!, status: 'dead', httpStatus: res.status });
+          }
+        } catch (err2) {
+          results.push({ id: bm.id, title: bm.title, url: bm.url!, status: 'error', error: (err2 as Error).message });
+        }
+      }
+    });
+    await Promise.all(checks);
+  }
+
+  const dead = results.filter(r => r.status === 'dead');
+  const errors = results.filter(r => r.status === 'error');
+  const alive = results.filter(r => r.status === 'alive');
+
+  return {
+    status: 'success',
+    data: {
+      checked: results.length,
+      alive: alive.length,
+      dead: dead.length,
+      errors: errors.length,
+      deadLinks: dead,
+      errorLinks: errors,
+    },
+  };
+}
+
 export async function handleFindDuplicates(args: Record<string, unknown>): Promise<ToolCallResponse> {
   const tree = await getTreeOrSubtree(args.folder_id as string | undefined);
   const allBookmarks = flattenBookmarks(tree);

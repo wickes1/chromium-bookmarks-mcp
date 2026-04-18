@@ -237,6 +237,38 @@ export async function startStdioProxy(): Promise<void> {
     }),
   );
 
+  // Export/Import tools
+  registerProxyTool(
+    'bookmark_export_html',
+    'Export Bookmarks as HTML',
+    'Export bookmarks in Netscape Bookmark HTML format (same as browser export). Returns the HTML string.',
+    z.object({
+      folder_id: z.string().optional().describe('Export a specific folder subtree. Omit for all bookmarks.'),
+    }),
+  );
+
+  registerProxyTool(
+    'bookmark_import_html',
+    'Import Bookmarks from HTML',
+    'Import bookmarks from Netscape Bookmark HTML format into the browser.',
+    z.object({
+      html: z.string().describe('Netscape Bookmark HTML content to import.'),
+      parent_id: z.string().optional().describe('Parent folder ID to import into. Default: Bookmarks Bar (1).'),
+    }),
+  );
+
+  // Analysis tools
+  registerProxyTool(
+    'bookmark_check_dead_links',
+    'Check Dead Links',
+    'Check bookmarks for broken/dead URLs by making HTTP requests. Checks in batches of 5.',
+    z.object({
+      folder_id: z.string().optional().describe('Scope check to a specific folder.'),
+      limit: z.number().optional().describe('Max bookmarks to check. Default: 50.'),
+      timeout_ms: z.number().optional().describe('HTTP request timeout in ms. Default: 5000.'),
+    }),
+  );
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   process.stderr.write('MCP stdio proxy started.\n');
