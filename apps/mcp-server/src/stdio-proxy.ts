@@ -103,10 +103,11 @@ export async function startStdioProxy(): Promise<void> {
   registerProxyTool(
     'bookmark_search',
     'Search Bookmarks',
-    'Full-text search across bookmark titles and URLs.',
+    'Full-text search across bookmark titles and URLs. Scope to a folder by ID or path.',
     z.object({
       query: z.string().describe('Search query to match against titles and URLs.'),
-      folder_id: z.string().optional().describe('Scope search to a specific folder subtree.'),
+      folder_id: z.string().optional().describe('Scope search to a specific folder subtree by ID.'),
+      folder_path: z.string().optional().describe('Scope search by folder path, e.g. "Bookmarks Bar > Tech > AI". Alternative to folder_id.'),
       limit: z.number().optional().describe('Max results to return. Default: 50.'),
     }),
   );

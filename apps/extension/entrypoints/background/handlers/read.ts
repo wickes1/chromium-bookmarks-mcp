@@ -156,12 +156,38 @@ export async function handleList(args: Record<string, unknown>): Promise<ToolCal
   };
 }
 
+// Resolve a folder path like "Bookmarks Bar > Tech > AI" to its folder ID.
+// Walks down from root (or a given parent) matching folder names at each level.
+async function resolveFolderPath(path: string, rootId: string = '0'): Promise<string | null> {
+  const parts = path.split('>').map(p => p.trim()).filter(Boolean);
+  let currentId = rootId;
+
+  for (const part of parts) {
+    const children = await chrome.bookmarks.getChildren(currentId);
+    const match = children.find(c => !c.url && c.title === part);
+    if (!match) return null;
+    currentId = match.id;
+  }
+
+  return currentId;
+}
+
 export async function handleSearch(args: Record<string, unknown>): Promise<ToolCallResponse> {
   const query = args.query as string;
-  const folderId = args.folder_id as string | undefined;
+  let folderId = args.folder_id as string | undefined;
+  const folderPath = args.folder_path as string | undefined;
   const limit = (args.limit as number) || 50;
 
   if (!query) return { status: 'error', error: 'query is required' };
+
+  // Resolve folder_path to folder_id if provided
+  if (folderPath && !folderId) {
+    const resolved = await resolveFolderPath(folderPath);
+    if (!resolved) {
+      return { status: 'error', error: `Folder not found: ${folderPath}` };
+    }
+    folderId = resolved;
+  }
 
   let results = await chrome.bookmarks.search(query);
 
