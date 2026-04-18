@@ -1,7 +1,7 @@
 /** Register/unregister native messaging host manifest for detected browsers. */
 import { join, dirname } from 'node:path';
 import { mkdirSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
-import { NATIVE_HOST_NAME, DEFAULT_PORT } from '@chromium-bookmarks-mcp/shared';
+import { NATIVE_HOST_NAME, DEFAULT_PORT } from './types.js';
 import { getInstalledBrowsers } from './browsers.js';
 
 function getNativeHostPath(): string {

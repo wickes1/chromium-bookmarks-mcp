@@ -5,8 +5,8 @@
  * stdin/stdout: Chrome native messaging binary protocol.
  * Also runs Bun.serve() on localhost:PORT for MCP stdio proxy (Process C) to connect to.
  */
-import { NativeMessageType, DEFAULT_PORT, REQUEST_TIMEOUT_MS } from '@chromium-bookmarks-mcp/shared';
-import type { NativeMessage, ToolCallPayload, ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
+import { NativeMessageType, DEFAULT_PORT, REQUEST_TIMEOUT_MS } from './types.js';
+import type { NativeMessage, ToolCallPayload, ToolCallResponse } from './types.js';
 import { encodeNativeMessage, decodeNativeMessages } from './native-protocol.js';
 
 // --- State ---

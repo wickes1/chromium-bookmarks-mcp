@@ -25,15 +25,14 @@
   },
   "files": [
     "src/**/*.ts",
+    "!src/**/*.test.ts",
     "bin/**",
-    "package.json",
-    "README.md"
+    "package.json"
   ],
   "scripts": {
     "postinstall": "bun run src/index.ts register || true"
   },
   "dependencies": {
-    "@chromium-bookmarks-mcp/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.24.0"
   },

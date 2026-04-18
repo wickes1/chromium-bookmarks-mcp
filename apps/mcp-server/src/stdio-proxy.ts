@@ -6,8 +6,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { DEFAULT_PORT } from '@chromium-bookmarks-mcp/shared';
-import type { ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
+import { DEFAULT_PORT } from './types.js';
+import type { ToolCallResponse } from './types.js';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 
