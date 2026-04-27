@@ -10,7 +10,11 @@ import type { NativeMessage, ToolCallPayload, ToolCallResponse } from './types.j
 import { encodeNativeMessage, decodeNativeMessages } from './native-protocol.js';
 
 // --- State ---
-let buffer = Buffer.alloc(0);
+const EMPTY_BUFFER = Buffer.alloc(0);
+const MAX_BUFFER_SIZE = 100 * 1024 * 1024; // 100 MB
+const MAX_PENDING_REQUESTS = 100;
+
+let buffer = EMPTY_BUFFER;
 const pendingRequests = new Map<string, {
   resolve: (value: ToolCallResponse) => void;
   reject: (reason: Error) => void;
@@ -24,14 +28,20 @@ function sendToExtension(msg: NativeMessage): void {
 }
 
 // --- Native Messaging: read from stdin ---
-process.stdin.on('data', (chunk: Buffer) => {
-  buffer = Buffer.concat([buffer, chunk]);
+process.stdin.on('data', (chunk: Buffer<ArrayBuffer>) => {
+  buffer = buffer.length === 0 ? chunk : Buffer.concat([buffer, chunk]);
+
+  if (buffer.length > MAX_BUFFER_SIZE) {
+    process.stderr.write(`Buffer overflow: ${buffer.length} bytes, resetting.\n`);
+    buffer = EMPTY_BUFFER;
+    return;
+  }
+
   const { messages, remaining } = decodeNativeMessages(buffer);
-  buffer = Buffer.from(remaining);
+  buffer = remaining.length === 0 ? EMPTY_BUFFER : Buffer.from(remaining);
 
   for (const raw of messages) {
-    const msg = raw as NativeMessage;
-    handleExtensionMessage(msg);
+    handleExtensionMessage(raw as NativeMessage);
   }
 });
 
@@ -100,6 +110,10 @@ function startHttpServer(config?: { port?: number }): void {
       }
 
       if (url.pathname === '/call-tool' && req.method === 'POST') {
+        if (pendingRequests.size >= MAX_PENDING_REQUESTS) {
+          return Response.json({ status: 'error', error: 'Too many pending requests' }, { status: 503 });
+        }
+
         let body: { toolName?: string; args?: Record<string, unknown> };
         try {
           body = await req.json();

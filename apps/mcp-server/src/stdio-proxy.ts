@@ -8,12 +8,9 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { DEFAULT_PORT } from './types.js';
 import type { ToolCallResponse } from './types.js';
-import { readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import pkg from '../package.json';
 
 const HTTP_BASE = `http://127.0.0.1:${DEFAULT_PORT}`;
-
-const pkg = JSON.parse(readFileSync(join(dirname(new URL(import.meta.url).pathname), '..', 'package.json'), 'utf-8'));
 const VERSION: string = pkg.version;
 
 async function callNativeHost(toolName: string, args: Record<string, unknown>): Promise<ToolCallResponse> {
@@ -21,6 +18,7 @@ async function callNativeHost(toolName: string, args: Record<string, unknown>): 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ toolName, args }),
+    signal: AbortSignal.timeout(35_000),
   });
 
   if (!res.ok) {
@@ -34,15 +32,6 @@ async function callNativeHost(toolName: string, args: Record<string, unknown>): 
   return res.json() as Promise<ToolCallResponse>;
 }
 
-async function checkConnection(): Promise<boolean> {
-  try {
-    const res = await fetch(`${HTTP_BASE}/health`, { signal: AbortSignal.timeout(2000) });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
 export async function startStdioProxy(): Promise<void> {
   const server = new McpServer(
     { name: 'chromium-bookmarks-mcp', version: VERSION },
@@ -51,7 +40,6 @@ export async function startStdioProxy(): Promise<void> {
 
   const NOT_CONNECTED_MSG = 'Extension not connected. Please open your browser and ensure the Chromium Bookmarks MCP extension is installed.';
 
-  // Helper: register a tool that proxies to the native host
   function registerProxyTool(
     name: string,
     title: string,
@@ -59,10 +47,6 @@ export async function startStdioProxy(): Promise<void> {
     inputSchema: z.ZodObject<z.ZodRawShape>,
   ) {
     server.registerTool(name, { title, description, inputSchema }, async (args) => {
-      const connected = await checkConnection();
-      if (!connected) {
-        return { content: [{ type: 'text' as const, text: NOT_CONNECTED_MSG }], isError: true };
-      }
       try {
         const result = await callNativeHost(name, args as Record<string, unknown>);
         if (result.status === 'error') {
@@ -70,7 +54,11 @@ export async function startStdioProxy(): Promise<void> {
         }
         return { content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }] };
       } catch (err) {
-        return { content: [{ type: 'text' as const, text: `Error: ${(err as Error).message}` }], isError: true };
+        const msg = (err as Error).message;
+        if (msg.includes('ECONNREFUSED') || msg.includes('fetch failed') || msg.includes('TimeoutError')) {
+          return { content: [{ type: 'text' as const, text: NOT_CONNECTED_MSG }], isError: true };
+        }
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
       }
     });
   }

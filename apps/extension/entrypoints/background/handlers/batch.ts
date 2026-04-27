@@ -32,16 +32,15 @@ export async function handleBatchMove(args: Record<string, unknown>): Promise<To
   };
 }
 
-// Helper: flatten bookmarks from a tree, excluding a specific subtree by ID
 function flattenBookmarksExcluding(
   nodes: chrome.bookmarks.BookmarkTreeNode[],
   excludeId: string,
+  result: chrome.bookmarks.BookmarkTreeNode[] = [],
 ): chrome.bookmarks.BookmarkTreeNode[] {
-  const result: chrome.bookmarks.BookmarkTreeNode[] = [];
   for (const node of nodes) {
-    if (node.id === excludeId) continue; // skip the excluded subtree entirely
+    if (node.id === excludeId) continue;
     if (node.url) result.push(node);
-    if (node.children) result.push(...flattenBookmarksExcluding(node.children, excludeId));
+    if (node.children) flattenBookmarksExcluding(node.children, excludeId, result);
   }
   return result;
 }

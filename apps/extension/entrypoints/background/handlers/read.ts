@@ -20,10 +20,7 @@ export function flattenBookmarks(nodes: chrome.bookmarks.BookmarkTreeNode[], res
 
 // --- Internal helpers ---
 
-// Module-level cache: nodeId → resolved folder path string.
-// Valid for the lifetime of the process session. Bookmarks rarely move mid-session,
-// so a persistent cache is acceptable. Call clearFolderPathCache() before batch
-// operations if freshness is required.
+const MAX_FOLDER_PATH_CACHE = 5000;
 const _folderPathCache = new Map<string, string>();
 
 export function clearFolderPathCache(): void {
@@ -54,8 +51,10 @@ async function getFolderPath(nodeId: string): Promise<string> {
     currentId = n.parentId || '';
   }
 
-  // `uncached` is ordered from requested node up to the highest uncached ancestor.
-  // Reverse to walk top-down so each parent path is resolved before its children.
+  if (_folderPathCache.size > MAX_FOLDER_PATH_CACHE) {
+    _folderPathCache.clear();
+  }
+
   for (let i = uncached.length - 1; i >= 0; i--) {
     const { id, title, parentId } = uncached[i];
     const parentPath = parentId && parentId !== '0'
@@ -297,32 +296,30 @@ export async function handleCheckDeadLinks(args: Record<string, unknown>): Promi
   for (let i = 0; i < checkable.length; i += 5) {
     const batch = checkable.slice(i, i + 5);
     const checks = batch.map(async (bm) => {
+      const record = (status: 'alive' | 'dead' | 'error', httpStatus?: number, error?: string) =>
+        results.push({ id: bm.id, title: bm.title, url: bm.url!, status, httpStatus, error });
+
       try {
         const res = await fetch(bm.url!, {
           method: 'HEAD',
           signal: AbortSignal.timeout(timeoutMs),
           redirect: 'follow',
         });
-        if (res.ok) {
-          results.push({ id: bm.id, title: bm.title, url: bm.url!, status: 'alive', httpStatus: res.status });
-        } else {
-          results.push({ id: bm.id, title: bm.title, url: bm.url!, status: 'dead', httpStatus: res.status });
-        }
+        record(res.ok ? 'alive' : 'dead', res.status);
       } catch {
-        // Some servers reject HEAD, try GET as fallback
         try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
           const res = await fetch(bm.url!, {
             method: 'GET',
-            signal: AbortSignal.timeout(timeoutMs),
+            signal: controller.signal,
             redirect: 'follow',
           });
-          if (res.ok) {
-            results.push({ id: bm.id, title: bm.title, url: bm.url!, status: 'alive', httpStatus: res.status });
-          } else {
-            results.push({ id: bm.id, title: bm.title, url: bm.url!, status: 'dead', httpStatus: res.status });
-          }
+          clearTimeout(timer);
+          res.body?.cancel();
+          record(res.ok ? 'alive' : 'dead', res.status);
         } catch (err2) {
-          results.push({ id: bm.id, title: bm.title, url: bm.url!, status: 'error', error: (err2 as Error).message });
+          record('error', undefined, (err2 as Error).message);
         }
       }
     });

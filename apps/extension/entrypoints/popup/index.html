@@ -6,7 +6,7 @@
   <title>Bookmarks MCP</title>
   <style>
     body {
-      width: 280px;
+      width: 240px;
       padding: 16px;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       font-size: 13px;
@@ -22,22 +22,47 @@
       background: #f5f5f5;
     }
     .dot {
-      width: 10px;
-      height: 10px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
+      flex-shrink: 0;
     }
     .dot.connected { background: #4CAF50; }
     .dot.disconnected { background: #F44336; }
-    .info { margin-top: 12px; color: #666; font-size: 11px; line-height: 1.5; white-space: pre-line; }
+    .status-label { font-weight: 500; }
+    .port {
+      margin-top: 8px;
+      padding-left: 4px;
+      color: #999;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 11px;
+      display: none;
+    }
+    .footer {
+      margin-top: 12px;
+      display: flex;
+      justify-content: flex-end;
+    }
+    .footer a {
+      color: #ccc;
+      display: flex;
+    }
+    .footer a:hover { color: #666; }
+    .footer a svg { fill: currentColor; }
   </style>
 </head>
 <body>
   <h3>Bookmarks MCP</h3>
   <div class="status">
     <div id="dot" class="dot disconnected"></div>
-    <span id="status-text">Checking...</span>
+    <span id="status-text" class="status-label">Checking...</span>
   </div>
-  <div class="info" id="info"></div>
+  <div class="port" id="port-info"></div>
+  <div class="footer">
+    <a href="https://github.com/Wickes1/chromium-bookmarks-mcp" target="_blank" rel="noopener" title="GitHub">
+      <svg width="14" height="14" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+    </a>
+  </div>
   <script type="module" src="./main.ts"></script>
 </body>
 </html>

@@ -158,7 +158,7 @@ export default defineBackground(() => {
   // Handle status queries from popup
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'get-status') {
-      sendResponse({ connected: port !== null });
+      sendResponse({ connected: port !== null, port: DEFAULT_PORT });
       return true;
     }
   });
