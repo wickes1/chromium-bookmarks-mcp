@@ -19,3 +19,6 @@ Thumbs.db
 # Build artifacts
 *.zip
 *.tgz
+
+# Internal dev docs (specs, plans, reviews, TODOs) — do not ship
+docs/
