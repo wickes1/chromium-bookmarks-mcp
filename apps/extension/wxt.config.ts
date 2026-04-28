@@ -5,7 +5,7 @@ export default defineConfig({
   entrypointsDir: 'entrypoints',
   manifest: {
     name: 'Chromium Bookmarks MCP',
-    version: '0.1.0',
+    version: '0.1.1',
     description: 'Give AI agents real-time read/write access to your bookmarks via MCP',
     permissions: ['bookmarks', 'nativeMessaging', 'offscreen'],
     icons: {

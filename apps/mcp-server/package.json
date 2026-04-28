@@ -1,6 +1,6 @@
 {
   "name": "chromium-bookmarks-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for real-time Chromium browser bookmark management. Works with Brave, Chrome, Edge, Arc.",
   "type": "module",
   "license": "MIT",
