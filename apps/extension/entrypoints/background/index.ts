@@ -17,8 +17,6 @@ export default defineBackground(() => {
       port = chrome.runtime.connectNative(NATIVE_HOST_NAME);
       console.log('[BM-MCP] Connected to native host');
 
-      acquireKeepalive();
-
       port.onMessage.addListener((msg: NativeMessage) => {
         handleNativeMessage(msg);
       });
@@ -53,6 +51,7 @@ export default defineBackground(() => {
   async function handleNativeMessage(msg: NativeMessage): Promise<void> {
     if (msg.type === NativeMessageType.SERVER_STARTED) {
       console.log('[BM-MCP] HTTP server started on port', (msg.payload as { port: number }).port);
+      acquireKeepalive();
       return;
     }
 
