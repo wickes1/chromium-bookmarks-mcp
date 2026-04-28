@@ -49,8 +49,26 @@ export function register(extensionId?: string): void {
     mkdirSync(browser.nativeHostDir, { recursive: true });
     const manifestPath = join(browser.nativeHostDir, filename);
     writeFileSync(manifestPath, manifestJson, 'utf-8');
-    console.log(`Registered for ${browser.name}: ${manifestPath}`);
+    console.error(`Registered for ${browser.name}: ${manifestPath}`);
   }
+}
+
+/**
+ * Idempotent self-registration for stdio-proxy startup. Writes the native-host
+ * manifest only if at least one detected browser is missing it. Safe to call
+ * on every proxy startup.
+ */
+export function ensureRegistered(): void {
+  const browsers = getInstalledBrowsers();
+  if (browsers.length === 0) return;
+
+  const filename = `${NATIVE_HOST_NAME}.json`;
+  const allRegistered = browsers.every((b) =>
+    existsSync(join(b.nativeHostDir, filename))
+  );
+
+  if (allRegistered) return;
+  register();
 }
 
 export function unregister(): void {
@@ -61,7 +79,7 @@ export function unregister(): void {
     const manifestPath = join(browser.nativeHostDir, filename);
     if (existsSync(manifestPath)) {
       unlinkSync(manifestPath);
-      console.log(`Unregistered from ${browser.name}: ${manifestPath}`);
+      console.error(`Unregistered from ${browser.name}: ${manifestPath}`);
     }
   }
 }

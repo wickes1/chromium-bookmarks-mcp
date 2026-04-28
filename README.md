@@ -30,13 +30,7 @@
   <img src="https://img.shields.io/badge/Install_from-Chrome_Web_Store-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Install from Chrome Web Store" height="48">
 </a>
 
-### 2. Install and register the MCP server
-
-```bash
-npx chromium-bookmarks-mcp register
-```
-
-### 3. Add to your AI client
+### 2. Add to your AI client
 
 **Claude Code:**
 ```bash
@@ -55,9 +49,11 @@ claude mcp add bookmarks -- npx chromium-bookmarks-mcp
 }
 ```
 
+> The first time the MCP server starts, it automatically registers itself as a native host for every detected Chromium browser. No manual `register` step is needed.
+
 **Cursor / Windsurf / other MCP clients** — use the same command: `npx chromium-bookmarks-mcp`
 
-### 4. Activate the connection
+### 3. Activate the connection
 
 Open your browser and click the extension icon. **This activates the connection** between the extension and the MCP server — you should see a green dot and **Connected** status. If you don't, click the **Refresh status** button in the popup.
 
@@ -188,7 +184,7 @@ npx chromium-bookmarks-mcp doctor       # Diagnose connection issues
 
 | Issue | Solution |
 |-------|----------|
-| Extension shows "Disconnected" | Click **Refresh status** in the popup. If still disconnected, run `npx chromium-bookmarks-mcp register`, then click Refresh again. Verify with `npx chromium-bookmarks-mcp doctor`. |
+| Extension shows "Disconnected" | Click **Refresh status** in the popup. If still disconnected, run `npx chromium-bookmarks-mcp doctor` to diagnose. |
 | `register` doesn't detect browser | Pass the extension ID manually: `npx chromium-bookmarks-mcp register <ID>` |
 | MCP tools timeout | Ensure your browser is open and the extension is enabled |
 | Port 19420 conflict | Another instance may be running. Check with `lsof -i :19420` |

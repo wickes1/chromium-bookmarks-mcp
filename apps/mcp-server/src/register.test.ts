@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildManifestForTest, PUBLISHED_EXTENSION_ID } from './register.js';
+import { buildManifestForTest, PUBLISHED_EXTENSION_ID, ensureRegistered } from './register.js';
 
 describe('buildManifest', () => {
   test('defaults allowed_origins to the published Web Store extension ID', () => {
@@ -16,5 +16,12 @@ describe('buildManifest', () => {
   test('does not use the wildcard origin by default', () => {
     const m = buildManifestForTest();
     expect(m.allowed_origins).not.toContain('chrome-extension://*/');
+  });
+});
+
+describe('ensureRegistered', () => {
+  test('is exported and callable without arguments', () => {
+    expect(typeof ensureRegistered).toBe('function');
+    expect(ensureRegistered.length).toBe(0);
   });
 });
