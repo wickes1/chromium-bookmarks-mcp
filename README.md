@@ -1,12 +1,76 @@
-# chromium-bookmarks-mcp
+<p align="center">
+  <img src="apps/extension/public/icon.svg" width="128" height="128" alt="Chromium Bookmarks MCP">
+</p>
 
-Give AI agents real-time read/write access to your Chromium browser bookmarks via [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
+<h1 align="center">Chromium Bookmarks MCP</h1>
 
-Works with **Brave**, **Chrome**, **Edge**, **Arc**, and any Chromium-based browser.
+<p align="center">
+  <strong>Give AI agents real-time read/write access to your browser bookmarks via <a href="https://modelcontextprotocol.io/">Model Context Protocol</a>.</strong>
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/chromium-bookmarks-mcp"><img src="https://img.shields.io/npm/v/chromium-bookmarks-mcp" alt="npm version"></a>
+  <a href="https://chromewebstore.google.com/detail/chromium-bookmarks-mcp/ipcgfbbojaphhaoanjalmjmooeobjein"><img src="https://img.shields.io/badge/Chrome_Web_Store-published-4285F4?logo=googlechrome&logoColor=white" alt="Chrome Web Store"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-compatible-blue" alt="MCP Compatible"></a>
+</p>
+
+<p align="center">
+  Works with <strong>Claude Code</strong> &middot; <strong>Claude Desktop</strong> &middot; <strong>Cursor</strong> &middot; <strong>Windsurf</strong> &middot; <strong>VS Code Copilot</strong> &middot; and any MCP client<br>
+  Supports <strong>Chrome</strong> &middot; <strong>Brave</strong> &middot; <strong>Edge</strong> &middot; <strong>Arc</strong> &middot; and any Chromium-based browser
+</p>
+
+---
+
+## Quick Start
+
+### 1. Install the Chrome extension
+
+<a href="https://chromewebstore.google.com/detail/chromium-bookmarks-mcp/ipcgfbbojaphhaoanjalmjmooeobjein">
+  <img src="https://img.shields.io/badge/Install_from-Chrome_Web_Store-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Install from Chrome Web Store" height="48">
+</a>
+
+### 2. Install and register the MCP server
+
+```bash
+npx chromium-bookmarks-mcp register
+```
+
+### 3. Add to your AI client
+
+**Claude Code:**
+```bash
+claude mcp add bookmarks -- npx chromium-bookmarks-mcp
+```
+
+**Claude Desktop** (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "bookmarks": {
+      "command": "npx",
+      "args": ["chromium-bookmarks-mcp"]
+    }
+  }
+}
+```
+
+**Cursor / Windsurf / other MCP clients** — use the same command: `npx chromium-bookmarks-mcp`
+
+### 4. Verify
+
+Open your browser, click the extension icon — you should see a green dot and **Connected** status.
+
+Then ask your AI agent:
+```
+Use the ping tool to check if bookmarks MCP is connected
+```
+
+> **Note:** Your browser must be open for the MCP tools to work. The extension communicates with the local MCP server process — no data leaves your machine.
 
 ## Features
 
-**19 MCP tools** for complete bookmark management:
+**20 MCP tools** for complete bookmark management:
 
 | Category | Tools |
 |----------|-------|
@@ -18,7 +82,7 @@ Works with **Brave**, **Chrome**, **Edge**, **Arc**, and any Chromium-based brow
 
 **Key capabilities:**
 - Real-time operations while browser is open (no file manipulation)
-- Folder path resolution (`bookmark_search` supports `folder_path` like `"Bookmarks Bar > Tech > AI"`)
+- Folder path resolution (`"Bookmarks Bar > Tech > AI"`)
 - Auto-create nested folders with `create_parents`
 - Smart deduplication by URL
 - Folder merge with optional dedup
@@ -33,7 +97,7 @@ Three-process design with HTTP bridge:
 Claude Code / AI Agent
     | (MCP stdio JSON-RPC)
     v
-MCP Stdio Proxy (Process C)        <- spawned by Claude Code
+MCP Stdio Proxy (Process C)        <- spawned by AI client
     | (HTTP to localhost:19420)
     v
 Native Host + HTTP Server (Process A) <- spawned by browser extension
@@ -43,66 +107,6 @@ Browser Extension (Service Worker)
     | (chrome.bookmarks API)
     v
 Browser Bookmarks
-```
-
-## Installation
-
-### 1. Install the browser extension
-
-**From source (development):**
-
-```bash
-git clone https://github.com/Wickes1/chromium-bookmarks-mcp.git
-cd chromium-bookmarks-mcp
-bun install
-cd apps/extension && bun run wxt build
-```
-
-Then load the unpacked extension:
-1. Open `brave://extensions/` (or `chrome://extensions/`)
-2. Enable **Developer mode**
-3. Click **Load unpacked** -> select `apps/extension/.output/chrome-mv3/`
-4. Note the **Extension ID**
-
-### 2. Install the MCP server
-
-```bash
-# From source
-bun install
-```
-
-### 3. Register the native messaging host
-
-```bash
-cd apps/mcp-server
-bun run src/index.ts register <YOUR_EXTENSION_ID>
-```
-
-This registers the native messaging host manifest for all detected Chromium browsers.
-
-### 4. Connect to Claude Code
-
-```bash
-claude mcp add bookmarks -- bun run /path/to/chromium-bookmarks-mcp/apps/mcp-server/src/index.ts
-```
-
-### 5. Verify
-
-Open your browser, click the extension icon — should show **Connected** with a green dot.
-
-In Claude Code:
-```
-Use the ping tool to check if bookmarks MCP is connected
-```
-
-## CLI Commands
-
-```bash
-bun run apps/mcp-server/src/index.ts              # Start MCP stdio proxy (default)
-bun run apps/mcp-server/src/index.ts register      # Register native host for detected browsers
-bun run apps/mcp-server/src/index.ts register ID   # Register with specific extension ID
-bun run apps/mcp-server/src/index.ts unregister    # Remove native host registration
-bun run apps/mcp-server/src/index.ts doctor        # Diagnose connection issues
 ```
 
 ## Tool Reference
@@ -170,12 +174,47 @@ bun run apps/mcp-server/src/index.ts doctor        # Diagnose connection issues
 - `limit` (default: 50) — Max bookmarks to check
 - `timeout_ms` (default: 5000) — Request timeout
 
+## CLI Commands
+
+```bash
+npx chromium-bookmarks-mcp              # Start MCP stdio proxy (default)
+npx chromium-bookmarks-mcp register     # Register native host for detected browsers
+npx chromium-bookmarks-mcp register ID  # Register with specific extension ID
+npx chromium-bookmarks-mcp unregister   # Remove native host registration
+npx chromium-bookmarks-mcp doctor       # Diagnose connection issues
+```
+
+## Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Extension shows "Disconnected" | Make sure you ran `npx chromium-bookmarks-mcp register` and restarted your browser |
+| `register` doesn't detect browser | Pass the extension ID manually: `npx chromium-bookmarks-mcp register <ID>` |
+| MCP tools timeout | Ensure your browser is open and the extension is enabled |
+| Port 19420 conflict | Another instance may be running. Check with `lsof -i :19420` |
+| Tools work but return empty | Your browser may need bookmarks — try creating one manually first |
+
+For deeper diagnostics, run:
+```bash
+npx chromium-bookmarks-mcp doctor
+```
+
+## Supported Browsers
+
+| Browser | macOS | Linux | Windows |
+|---------|-------|-------|---------|
+| Chrome | Yes | Yes | Yes |
+| Brave | Yes | Yes | Yes |
+| Edge | Yes | Yes | Yes |
+| Arc | Yes | - | - |
+| Chromium | Yes | Yes | - |
+
 ## Development
 
 ### Prerequisites
 
 - [Bun](https://bun.sh/) 1.2+
-- A Chromium browser (Brave, Chrome, Edge, etc.)
+- A Chromium browser
 
 ### Project Structure
 
@@ -193,7 +232,7 @@ chromium-bookmarks-mcp/
     │   ├── native-host.ts    # Process A: native messaging + HTTP
     │   ├── stdio-proxy.ts    # Process C: MCP stdio proxy
     │   ├── native-protocol.ts # Chrome binary protocol
-    │   ├── browsers.ts       # Browser detection (macOS/Linux/Windows)
+    │   ├── browsers.ts       # Browser detection
     │   └── register.ts       # Native host registration
     └── bin/run_host.sh       # Shell wrapper for native host
 ```
@@ -216,16 +255,6 @@ cd apps/extension && bun run wxt build  # Production build
 - Root folder deletion protected
 - Destructive batch operations require explicit confirmation
 - Full [Privacy Policy](privacy-policy.md)
-
-## Supported Browsers
-
-| Browser | macOS | Linux | Windows |
-|---------|-------|-------|---------|
-| Chrome | Yes | Yes | Yes |
-| Brave | Yes | Yes | Yes |
-| Edge | Yes | Yes | Yes |
-| Arc | Yes | - | - |
-| Chromium | Yes | Yes | - |
 
 ## License
 
