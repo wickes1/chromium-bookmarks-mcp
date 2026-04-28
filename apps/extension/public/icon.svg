@@ -1,8 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="16" fill="#4A90D9"/>
-  <path d="M64 24L84 52H44L64 24Z" fill="white" opacity="0.9"/>
-  <rect x="36" y="56" width="56" height="8" rx="4" fill="white" opacity="0.7"/>
-  <rect x="36" y="70" width="44" height="8" rx="4" fill="white" opacity="0.5"/>
-  <rect x="36" y="84" width="52" height="8" rx="4" fill="white" opacity="0.6"/>
-  <rect x="36" y="98" width="36" height="8" rx="4" fill="white" opacity="0.4"/>
+  <!-- Bookmark with angle brackets (protocol/code) -->
+  <rect width="128" height="128" rx="20" fill="#3B82F6"/>
+  <!-- Bookmark body -->
+  <path d="M40 24h48a4 4 0 0 1 4 4v80l-28-18-28 18V28a4 4 0 0 1 4-4z" fill="white" opacity="0.95"/>
+  <!-- Protocol brackets < > inside bookmark -->
+  <path d="M56 50l-8 10 8 10" fill="none" stroke="#3B82F6" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M72 50l8 10-8 10" fill="none" stroke="#3B82F6" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
