@@ -18,19 +18,21 @@ interface ManifestJson {
   allowed_origins: string[];
 }
 
-function buildManifest(extensionId?: string): ManifestJson {
-  const origins = extensionId
-    ? [`chrome-extension://${extensionId}/`]
-    : ['chrome-extension://*/'];
+export const PUBLISHED_EXTENSION_ID = 'ipcgfbbojaphhaoanjalmjmooeobjein';
 
+function buildManifest(extensionId?: string): ManifestJson {
+  const id = extensionId ?? PUBLISHED_EXTENSION_ID;
   return {
     name: NATIVE_HOST_NAME,
     description: 'MCP Server for Chromium Bookmarks',
     path: getNativeHostPath(),
     type: 'stdio',
-    allowed_origins: origins,
+    allowed_origins: [`chrome-extension://${id}/`],
   };
 }
+
+// Test-only export. Internal `buildManifest` stays unexported.
+export const buildManifestForTest = buildManifest;
 
 export function register(extensionId?: string): void {
   const browsers = getInstalledBrowsers();
