@@ -4,6 +4,11 @@
  */
 import { execFileSync } from 'node:child_process';
 
+interface ExecError extends Error {
+  status?: number | null;
+  stderr?: string | Buffer;
+}
+
 function runReg(args: string[]): string {
   try {
     return execFileSync('reg', args, {
@@ -11,10 +16,25 @@ function runReg(args: string[]): string {
       encoding: 'utf-8',
     });
   } catch (err) {
-    const e = err as { stderr?: string | Buffer; message: string };
+    const e = err as ExecError;
     const stderr = e.stderr ? e.stderr.toString() : '';
-    throw new Error(`reg ${args.join(' ')} failed: ${stderr || e.message}`);
+    const wrapped = new Error(`reg ${args.join(' ')} failed: ${stderr || e.message}`) as ExecError;
+    wrapped.status = e.status ?? null;
+    wrapped.stderr = stderr;
+    throw wrapped;
   }
+}
+
+/**
+ * reg.exe exits with status 1 when the key does not exist, regardless of
+ * locale. Detect that case so callers can treat it as "no key" instead of
+ * a hard error. Falls back to a regex on the localized message just in
+ * case some shell wrapper swallows the exit code.
+ */
+function isKeyNotFoundError(err: unknown): boolean {
+  const e = err as ExecError;
+  if (e.status === 1) return true;
+  return /unable to find|cannot find|not find|does not exist|找不到/i.test(e.message ?? '');
 }
 
 /** Set the (Default) value of a registry key to the given string. Creates the key if missing. */
@@ -27,9 +47,7 @@ export function regDelete(keyPath: string): void {
   try {
     runReg(['delete', keyPath, '/f']);
   } catch (err) {
-    // reg.exe exits non-zero when the key doesn't exist; treat as no-op.
-    const msg = (err as Error).message;
-    if (/cannot find|not find|找不到/i.test(msg)) return;
+    if (isKeyNotFoundError(err)) return;
     throw err;
   }
 }
@@ -46,8 +64,7 @@ export function regQuery(keyPath: string): string | null {
     const match = out.match(/\(Default\)\s+REG_SZ\s+(.+?)\s*$/m);
     return match ? match[1] : null;
   } catch (err) {
-    const msg = (err as Error).message;
-    if (/cannot find|not find|找不到/i.test(msg)) return null;
+    if (isKeyNotFoundError(err)) return null;
     throw err;
   }
 }
