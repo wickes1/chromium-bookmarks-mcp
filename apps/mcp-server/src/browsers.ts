@@ -6,6 +6,8 @@ import { existsSync } from 'node:fs';
 export interface BrowserInfo {
   name: string;
   nativeHostDir: string;
+  /** HKCU\Software\<this>\NativeMessagingHosts on Windows. Undefined on non-Windows. */
+  windowsRegistryParent?: string;
 }
 
 function macBrowsers(): BrowserInfo[] {
@@ -31,21 +33,25 @@ function linuxBrowsers(): BrowserInfo[] {
 }
 
 function windowsBrowsers(): BrowserInfo[] {
-  // On Windows, native messaging host manifests are registered via the file system under LOCALAPPDATA.
+  // On Windows, native messaging host manifests are registered via the file system under LOCALAPPDATA
+  // AND via per-user registry keys under HKCU\Software\<vendor>\<browser>\NativeMessagingHosts.
   const localAppData =
     process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local');
   return [
     {
       name: 'Chrome',
       nativeHostDir: join(localAppData, 'Google', 'Chrome', 'User Data', 'NativeMessagingHosts'),
+      windowsRegistryParent: 'Google\\Chrome',
     },
     {
       name: 'Brave',
       nativeHostDir: join(localAppData, 'BraveSoftware', 'Brave-Browser', 'User Data', 'NativeMessagingHosts'),
+      windowsRegistryParent: 'BraveSoftware\\Brave-Browser',
     },
     {
       name: 'Edge',
       nativeHostDir: join(localAppData, 'Microsoft', 'Edge', 'User Data', 'NativeMessagingHosts'),
+      windowsRegistryParent: 'Microsoft\\Edge',
     },
   ];
 }

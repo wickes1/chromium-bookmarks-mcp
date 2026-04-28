@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { DEFAULT_PORT } from './types.js';
 import type { ToolCallResponse } from './types.js';
 import pkg from '../package.json';
+import { ensureRegistered } from './register.js';
 
 const HTTP_BASE = `http://127.0.0.1:${DEFAULT_PORT}`;
 const VERSION: string = pkg.version;
@@ -33,6 +34,12 @@ async function callNativeHost(toolName: string, args: Record<string, unknown>): 
 }
 
 export async function startStdioProxy(): Promise<void> {
+  try {
+    ensureRegistered();
+  } catch (err) {
+    process.stderr.write(`[chromium-bookmarks-mcp] auto-register failed: ${(err as Error).message}\n`);
+  }
+
   const server = new McpServer(
     { name: 'chromium-bookmarks-mcp', version: VERSION },
     { instructions: 'Manage Chromium browser bookmarks. Requires the Chromium Bookmarks MCP extension to be installed and the browser to be open.' }

@@ -1,6 +1,7 @@
 const dot = document.getElementById('dot')!;
 const statusText = document.getElementById('status-text')!;
 const portInfo = document.getElementById('port-info')!;
+const refreshBtn = document.getElementById('refresh-btn') as HTMLButtonElement;
 
 async function checkStatus(): Promise<void> {
   try {
@@ -22,6 +23,20 @@ async function checkStatus(): Promise<void> {
     portInfo.style.display = 'none';
   }
 }
+
+async function forceReconnect(): Promise<void> {
+  refreshBtn.disabled = true;
+  statusText.textContent = 'Reconnecting...';
+  try {
+    await chrome.runtime.sendMessage({ type: 'force-reconnect' });
+  } catch {
+    // Ignore — checkStatus will reflect the failure.
+  }
+  await checkStatus();
+  refreshBtn.disabled = false;
+}
+
+refreshBtn.addEventListener('click', forceReconnect);
 
 checkStatus();
 setInterval(checkStatus, 3000);

@@ -4,9 +4,8 @@ export async function acquireKeepalive(): Promise<void> {
   if (offscreenCreated) return;
 
   try {
-    // @ts-expect-error: chrome.runtime.getContexts may not be typed
     const existingContexts = await chrome.runtime.getContexts({
-      contextTypes: ['OFFSCREEN_DOCUMENT'],
+      contextTypes: ['OFFSCREEN_DOCUMENT' as chrome.runtime.ContextType],
     });
 
     if (existingContexts.length > 0) {
@@ -18,10 +17,9 @@ export async function acquireKeepalive(): Promise<void> {
   }
 
   try {
-    // @ts-expect-error: chrome.offscreen is MV3 only
     await chrome.offscreen.createDocument({
       url: '/offscreen.html',
-      reasons: ['WORKERS'],
+      reasons: ['WORKERS' as chrome.offscreen.Reason],
       justification: 'Keep service worker alive for native messaging connection',
     });
     offscreenCreated = true;
@@ -35,7 +33,6 @@ export async function releaseKeepalive(): Promise<void> {
   if (!offscreenCreated) return;
 
   try {
-    // @ts-expect-error: chrome.offscreen is MV3 only
     await chrome.offscreen.closeDocument();
     offscreenCreated = false;
     console.log('[BM-MCP] Offscreen keepalive released');

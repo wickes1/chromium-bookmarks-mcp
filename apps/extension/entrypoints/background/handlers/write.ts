@@ -106,7 +106,7 @@ export async function handleCreate(args: Record<string, unknown>): Promise<ToolC
     resolvedParentId = await createFolderPath(parentPath, parentId || '1');
   }
 
-  const details: chrome.bookmarks.BookmarkCreateArg = {
+  const details: chrome.bookmarks.CreateDetails = {
     parentId: resolvedParentId,
     title,
     url,
@@ -131,7 +131,7 @@ export async function handleUpdate(args: Record<string, unknown>): Promise<ToolC
     return { status: 'error', error: 'At least one of title or url must be provided' };
   }
 
-  const changes: chrome.bookmarks.BookmarkChangesArg = {};
+  const changes: { title?: string; url?: string } = {};
   if (title !== undefined) changes.title = title;
   if (url !== undefined) changes.url = url;
 
@@ -157,7 +157,7 @@ export async function handleMove(args: Record<string, unknown>): Promise<ToolCal
   }
 
   try {
-    const destination: chrome.bookmarks.BookmarkDestinationArg = { parentId };
+    const destination: { parentId?: string; index?: number } = { parentId };
     if (index !== undefined) destination.index = index;
     const moved = await chrome.bookmarks.move(id, destination);
     return { status: 'success', data: moved };

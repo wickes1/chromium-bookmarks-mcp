@@ -22,6 +22,11 @@
 
 ---
 
+## Prerequisites
+
+- **[Bun](https://bun.sh) 1.2+** — the MCP server and native host run on Bun. Install with `curl -fsSL https://bun.sh/install | bash` (macOS / Linux) or `powershell -c "irm bun.sh/install.ps1 | iex"` (Windows).
+- A Chromium-based browser (Chrome, Brave, Edge, Arc, or Chromium itself).
+
 ## Quick Start
 
 ### 1. Install the Chrome extension
@@ -30,13 +35,7 @@
   <img src="https://img.shields.io/badge/Install_from-Chrome_Web_Store-4285F4?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Install from Chrome Web Store" height="48">
 </a>
 
-### 2. Install and register the MCP server
-
-```bash
-npx chromium-bookmarks-mcp register
-```
-
-### 3. Add to your AI client
+### 2. Add to your AI client
 
 **Claude Code:**
 ```bash
@@ -55,18 +54,20 @@ claude mcp add bookmarks -- npx chromium-bookmarks-mcp
 }
 ```
 
+> The first time the MCP server starts, it automatically registers itself as a native host for every detected Chromium browser — including writing the required HKCU registry keys on Windows. No manual `register` step is needed.
+
 **Cursor / Windsurf / other MCP clients** — use the same command: `npx chromium-bookmarks-mcp`
 
-### 4. Verify
+### 3. Activate the connection
 
-Open your browser, click the extension icon — you should see a green dot and **Connected** status.
+Open your browser and click the extension icon. **This activates the connection** between the extension and the MCP server — you should see a green dot and **Connected** status. If you don't, click the **Refresh status** button in the popup.
 
 Then ask your AI agent:
 ```
 Use the ping tool to check if bookmarks MCP is connected
 ```
 
-> **Note:** Your browser must be open for the MCP tools to work. The extension communicates with the local MCP server process — no data leaves your machine.
+> **Note:** Your browser must be open for the MCP tools to work. The extension only attempts a connection on browser launch, popup open, or Refresh — there is no background polling. No data leaves your machine.
 
 ## Features
 
@@ -179,16 +180,18 @@ Browser Bookmarks
 ```bash
 npx chromium-bookmarks-mcp              # Start MCP stdio proxy (default)
 npx chromium-bookmarks-mcp register     # Register native host for detected browsers
-npx chromium-bookmarks-mcp register ID  # Register with specific extension ID
+npx chromium-bookmarks-mcp register ID  # Register with specific extension ID (local dev)
 npx chromium-bookmarks-mcp unregister   # Remove native host registration
 npx chromium-bookmarks-mcp doctor       # Diagnose connection issues
 ```
+
+> `register` is **automatic** on first proxy startup. Run it manually only when changing extension IDs (local dev), or after manually deleting native-host manifests.
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| Extension shows "Disconnected" | Make sure you ran `npx chromium-bookmarks-mcp register` and restarted your browser |
+| Extension shows "Disconnected" | Click **Refresh status** in the popup. If still disconnected, run `npx chromium-bookmarks-mcp doctor` to diagnose. |
 | `register` doesn't detect browser | Pass the extension ID manually: `npx chromium-bookmarks-mcp register <ID>` |
 | MCP tools timeout | Ensure your browser is open and the extension is enabled |
 | Port 19420 conflict | Another instance may be running. Check with `lsof -i :19420` |
@@ -206,8 +209,10 @@ npx chromium-bookmarks-mcp doctor
 | Chrome | Yes | Yes | Yes |
 | Brave | Yes | Yes | Yes |
 | Edge | Yes | Yes | Yes |
-| Arc | Yes | - | - |
-| Chromium | Yes | Yes | - |
+| Arc | Yes | — | — |
+| Chromium | Yes | Yes | — |
+
+On Windows, `register` writes both the manifest JSON and the corresponding `HKCU\Software\<vendor>\<browser>\NativeMessagingHosts` registry key, which is how Chromium discovers native messaging hosts on Windows.
 
 ## Development
 
@@ -245,6 +250,17 @@ bun test                       # Run tests
 cd apps/extension && bun run wxt dev    # Dev mode (hot reload)
 cd apps/extension && bun run wxt build  # Production build
 ```
+
+### Working with a local unpacked extension
+
+The native-host manifest's `allowed_origins` defaults to the published Chrome Web Store extension ID. When developing against an unpacked extension you have two options:
+
+1. **Pin the dev ID via `manifest.key`** — copy the public key from the Web Store Developer Dashboard ("More info" → "Public key") into `apps/extension/wxt.config.ts` as `manifest.key`. Chrome derives the unpacked extension's ID from this key, matching the published one. Do **not** commit the key — keep it in a local `.env`-style override or a private branch.
+2. **Pass the dev ID to register** — load your unpacked extension, copy the ID from `chrome://extensions`, then run:
+   ```bash
+   npx chromium-bookmarks-mcp register <your-dev-extension-id>
+   ```
+   This rewrites `allowed_origins` to your dev ID for local testing.
 
 ## Security & Privacy
 

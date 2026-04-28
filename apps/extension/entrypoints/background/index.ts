@@ -17,8 +17,6 @@ export default defineBackground(() => {
       port = chrome.runtime.connectNative(NATIVE_HOST_NAME);
       console.log('[BM-MCP] Connected to native host');
 
-      acquireKeepalive();
-
       port.onMessage.addListener((msg: NativeMessage) => {
         handleNativeMessage(msg);
       });
@@ -53,6 +51,7 @@ export default defineBackground(() => {
   async function handleNativeMessage(msg: NativeMessage): Promise<void> {
     if (msg.type === NativeMessageType.SERVER_STARTED) {
       console.log('[BM-MCP] HTTP server started on port', (msg.payload as { port: number }).port);
+      acquireKeepalive();
       return;
     }
 
@@ -155,10 +154,25 @@ export default defineBackground(() => {
     }
   });
 
-  // Handle status queries from popup
+  // Handle status queries and manual reconnects from popup.
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'get-status') {
+      if (port === null) connect();
       sendResponse({ connected: port !== null, port: DEFAULT_PORT });
+      return true;
+    }
+
+    if (msg.type === 'force-reconnect') {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (port) {
+        try { port.disconnect(); } catch { /* already gone */ }
+        port = null;
+      }
+      connect();
+      sendResponse({ ok: true });
       return true;
     }
   });
