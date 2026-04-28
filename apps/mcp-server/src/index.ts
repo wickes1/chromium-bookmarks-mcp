@@ -4,25 +4,31 @@ import { startStdioProxy } from './stdio-proxy.js';
 
 const command = process.argv[2];
 
-switch (command) {
-  case 'register':
-    register(process.argv[3]);
-    break;
-  case 'unregister':
-    unregister();
-    break;
-  case 'doctor':
-    doctor();
-    break;
-  case undefined:
-  case 'serve':
-    startStdioProxy().catch((err) => {
-      process.stderr.write(`Fatal: ${err.message}\n`);
-      process.exit(1);
-    });
-    break;
-  default:
-    console.log(`Usage: chromium-bookmarks-mcp [command]
+async function main() {
+  switch (command) {
+    case 'register':
+      try {
+        register(process.argv[3]);
+      } catch (err) {
+        process.stderr.write(`${(err as Error).message}\n`);
+        process.exit(1);
+      }
+      break;
+    case 'unregister':
+      unregister();
+      break;
+    case 'doctor':
+      await doctor();
+      break;
+    case undefined:
+    case 'serve':
+      startStdioProxy().catch((err) => {
+        process.stderr.write(`Fatal: ${err.message}\n`);
+        process.exit(1);
+      });
+      break;
+    default:
+      console.log(`Usage: chromium-bookmarks-mcp [command]
 
 Commands:
   (none)       Start MCP stdio proxy (default)
@@ -30,4 +36,10 @@ Commands:
   unregister   Remove native host registration
   doctor       Diagnose connection issues
 `);
+  }
 }
+
+main().catch((err) => {
+  process.stderr.write(`Fatal: ${(err as Error).message}\n`);
+  process.exit(1);
+});
