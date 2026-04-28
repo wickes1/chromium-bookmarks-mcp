@@ -22,6 +22,11 @@
 
 ---
 
+## Prerequisites
+
+- **[Bun](https://bun.sh) 1.2+** — the MCP server and native host run on Bun. Install with `curl -fsSL https://bun.sh/install | bash` (macOS / Linux) or `powershell -c "irm bun.sh/install.ps1 | iex"` (Windows).
+- A Chromium-based browser (Chrome, Brave, Edge, Arc, or Chromium itself).
+
 ## Quick Start
 
 ### 1. Install the Chrome extension
@@ -49,7 +54,7 @@ claude mcp add bookmarks -- npx chromium-bookmarks-mcp
 }
 ```
 
-> The first time the MCP server starts, it automatically registers itself as a native host for every detected Chromium browser. No manual `register` step is needed.
+> The first time the MCP server starts, it automatically registers itself as a native host for every detected Chromium browser — including writing the required HKCU registry keys on Windows. No manual `register` step is needed.
 
 **Cursor / Windsurf / other MCP clients** — use the same command: `npx chromium-bookmarks-mcp`
 
@@ -175,10 +180,12 @@ Browser Bookmarks
 ```bash
 npx chromium-bookmarks-mcp              # Start MCP stdio proxy (default)
 npx chromium-bookmarks-mcp register     # Register native host for detected browsers
-npx chromium-bookmarks-mcp register ID  # Register with specific extension ID
+npx chromium-bookmarks-mcp register ID  # Register with specific extension ID (local dev)
 npx chromium-bookmarks-mcp unregister   # Remove native host registration
 npx chromium-bookmarks-mcp doctor       # Diagnose connection issues
 ```
+
+> `register` is **automatic** on first proxy startup. Run it manually only when changing extension IDs (local dev), or after manually deleting native-host manifests.
 
 ## Troubleshooting
 
@@ -202,8 +209,10 @@ npx chromium-bookmarks-mcp doctor
 | Chrome | Yes | Yes | Yes |
 | Brave | Yes | Yes | Yes |
 | Edge | Yes | Yes | Yes |
-| Arc | Yes | - | - |
-| Chromium | Yes | Yes | - |
+| Arc | Yes | — | — |
+| Chromium | Yes | Yes | — |
+
+On Windows, `register` writes both the manifest JSON and the corresponding `HKCU\Software\<vendor>\<browser>\NativeMessagingHosts` registry key, which is how Chromium discovers native messaging hosts on Windows.
 
 ## Development
 
