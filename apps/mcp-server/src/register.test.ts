@@ -8,8 +8,9 @@ describe('buildManifest', () => {
   });
 
   test('honours a CLI-supplied extension ID override', () => {
-    const m = buildManifestForTest('abcdefghijklmnopabcdefghijklmnop');
-    expect(m.allowed_origins).toEqual(['chrome-extension://abcdefghijklmnopabcdefghijklmnop/']);
+    const overrideId = 'abcdefghijklmnopabcdefghijklmnop';
+    const m = buildManifestForTest(overrideId);
+    expect(m.allowed_origins).toEqual([`chrome-extension://${overrideId}/`]);
   });
 
   test('does not use the wildcard origin by default', () => {
