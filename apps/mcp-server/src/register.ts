@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdirSync, writeFileSync, unlinkSync, existsSync, readFileSync } from 'node:fs';
 import { NATIVE_HOST_NAME, DEFAULT_PORT } from './types.js';
 import { getInstalledBrowsers } from './browsers.js';
+import { regAdd, regDelete, regQuery } from './windows-registry.js';
 
 function getNativeHostPath(): string {
   const thisDir = dirname(fileURLToPath(import.meta.url));
@@ -57,6 +58,11 @@ export function register(extensionId?: string): void {
     const manifestPath = join(browser.nativeHostDir, filename);
     writeFileSync(manifestPath, manifestJson, 'utf-8');
     console.error(`Registered for ${browser.name}: ${manifestPath}`);
+    if (process.platform === 'win32' && browser.windowsRegistryParent) {
+      const regPath = `HKCU\\Software\\${browser.windowsRegistryParent}\\NativeMessagingHosts\\${NATIVE_HOST_NAME}`;
+      regAdd(regPath, manifestPath);
+      console.error(`  Registered registry key: ${regPath}`);
+    }
   }
 }
 
@@ -78,10 +84,15 @@ export function ensureRegistered(): void {
     try {
       const raw = readFileSync(manifestPath, 'utf-8');
       const parsed = JSON.parse(raw) as { path?: string };
-      return parsed.path === expectedPath;
+      if (parsed.path !== expectedPath) return false;
     } catch {
       return false;
     }
+    if (process.platform === 'win32' && b.windowsRegistryParent) {
+      const regPath = `HKCU\\Software\\${b.windowsRegistryParent}\\NativeMessagingHosts\\${NATIVE_HOST_NAME}`;
+      if (regQuery(regPath) !== manifestPath) return false;
+    }
+    return true;
   });
 
   if (allCurrent) return;
@@ -97,6 +108,11 @@ export function unregister(): void {
     if (existsSync(manifestPath)) {
       unlinkSync(manifestPath);
       console.error(`Unregistered from ${browser.name}: ${manifestPath}`);
+    }
+    if (process.platform === 'win32' && browser.windowsRegistryParent) {
+      const regPath = `HKCU\\Software\\${browser.windowsRegistryParent}\\NativeMessagingHosts\\${NATIVE_HOST_NAME}`;
+      regDelete(regPath);
+      console.error(`  Removed registry key: ${regPath}`);
     }
   }
 }
@@ -114,8 +130,20 @@ export async function doctor(): Promise<void> {
   console.log(`\nDetected browsers: ${browsers.length}`);
   for (const browser of browsers) {
     const manifestPath = join(browser.nativeHostDir, filename);
-    const registered = existsSync(manifestPath);
-    console.log(`  ${browser.name}: ${registered ? 'REGISTERED' : 'NOT REGISTERED'}`);
+    const fileOk = existsSync(manifestPath);
+    let status: string;
+    if (process.platform === 'win32' && browser.windowsRegistryParent) {
+      const regPath = `HKCU\\Software\\${browser.windowsRegistryParent}\\NativeMessagingHosts\\${NATIVE_HOST_NAME}`;
+      const regValue = regQuery(regPath);
+      const regOk = regValue === manifestPath;
+      if (fileOk && regOk) status = 'REGISTERED';
+      else if (fileOk && !regOk) status = 'MANIFEST OK / REGISTRY MISSING (run register)';
+      else if (!fileOk && regOk) status = 'REGISTRY OK / MANIFEST MISSING (run register)';
+      else status = 'NOT REGISTERED';
+    } else {
+      status = fileOk ? 'REGISTERED' : 'NOT REGISTERED';
+    }
+    console.log(`  ${browser.name}: ${status}`);
   }
 
   console.log('\nHTTP server connectivity:');

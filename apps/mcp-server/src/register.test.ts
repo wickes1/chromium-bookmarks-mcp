@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test, afterAll } from 'bun:test';
 import { existsSync } from 'node:fs';
 import {
   buildManifestForTest,
@@ -52,5 +52,27 @@ describe('register input validation', () => {
 
   test('rejects uppercase letters', () => {
     expect(() => register('A'.repeat(32))).toThrow(/Invalid extension ID/);
+  });
+});
+
+import { regAdd, regDelete, regQuery } from './windows-registry.js';
+
+const onWindows = process.platform === 'win32';
+
+(onWindows ? describe : describe.skip)('windows-registry wrapper', () => {
+  const testKey = 'HKCU\\Software\\chromium-bookmarks-mcp-test\\__roundtrip';
+
+  afterAll(() => {
+    if (onWindows) {
+      try { regDelete('HKCU\\Software\\chromium-bookmarks-mcp-test'); } catch {}
+    }
+  });
+
+  test('regAdd, regQuery, regDelete round-trip', () => {
+    const value = 'C:\\test\\path.json';
+    regAdd(testKey, value);
+    expect(regQuery(testKey)).toBe(value);
+    regDelete(testKey);
+    expect(regQuery(testKey)).toBeNull();
   });
 });
