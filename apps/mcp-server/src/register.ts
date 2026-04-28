@@ -87,5 +87,5 @@ export function doctor(): void {
   fetch(`http://127.0.0.1:${DEFAULT_PORT}/health`, { signal: AbortSignal.timeout(2000) })
     .then((res) => res.json())
     .then((data) => console.log(`  Status: CONNECTED — ${JSON.stringify(data)}`))
-    .catch(() => console.log('  Status: NOT RUNNING (extension may not be open)'));
+    .catch(() => console.log('  Status: NOT RUNNING (open browser and click the extension icon to activate)'));
 }
