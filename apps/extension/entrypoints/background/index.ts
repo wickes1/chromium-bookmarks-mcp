@@ -155,13 +155,25 @@ export default defineBackground(() => {
     }
   });
 
-  // Handle status queries from popup. If we're disconnected, kick off a
-  // reconnect attempt as a side effect — this is what makes "open the popup"
-  // work as the activation signal after `register` has been run.
+  // Handle status queries and manual reconnects from popup.
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg.type === 'get-status') {
       if (port === null) connect();
       sendResponse({ connected: port !== null, port: DEFAULT_PORT });
+      return true;
+    }
+
+    if (msg.type === 'force-reconnect') {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (port) {
+        try { port.disconnect(); } catch { /* already gone */ }
+        port = null;
+      }
+      connect();
+      sendResponse({ ok: true });
       return true;
     }
   });
