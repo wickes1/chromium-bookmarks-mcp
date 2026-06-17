@@ -54,7 +54,7 @@ claude mcp add bookmarks -- npx chromium-bookmarks-mcp
 }
 ```
 
-> The first time the MCP server starts, it automatically registers itself as a native host for every detected Chromium browser — including writing the required HKCU registry keys on Windows. No manual `register` step is needed.
+> Registration runs when your MCP client first starts the stdio proxy (not at install time) — it registers itself as a native host for every detected Chromium browser, including writing the required HKCU registry keys on Windows. The step is idempotent and re-runs on every startup, so no manual `register` is needed.
 
 **Cursor / Windsurf / other MCP clients** — use the same command: `npx chromium-bookmarks-mcp`
 
@@ -69,9 +69,19 @@ Use the ping tool to check if bookmarks MCP is connected
 
 > **Note:** Your browser must be open for the MCP tools to work. The extension only attempts a connection on browser launch, popup open, or Refresh — there is no background polling. No data leaves your machine.
 
+### 4. Back up before any cleanup
+
+Bookmark deletes are **permanent — Chrome has no undo for them**. Before running any destructive tool (`bookmark_batch_delete`, `bookmark_deduplicate`, `bookmark_merge_folders` with `delete_source`, or `bookmark_delete_folder`), take a full snapshot:
+
+```
+Use bookmark_export_html to export all my bookmarks, then save the HTML to a file
+```
+
+`bookmark_export_html` returns the complete bookmark tree as standard Netscape Bookmark HTML — the same format the browser's own "Export bookmarks" produces. If a cleanup goes wrong, `bookmark_import_html` restores that snapshot back into your browser. Keep the export until you have verified the result.
+
 ## Features
 
-**20 MCP tools** for complete bookmark management:
+**19 MCP tools** for complete bookmark management:
 
 | Category | Tools |
 |----------|-------|
@@ -88,7 +98,8 @@ Use the ping tool to check if bookmarks MCP is connected
 - Smart deduplication by URL
 - Folder merge with optional dedup
 - Dead link detection with HEAD/GET fallback
-- Safety gates on destructive operations (`confirm: true` required)
+- Safety gates on destructive operations (`dry_run: true` to preview, `confirm: true` to execute)
+- HTML export as a one-call backup before cleanup (`bookmark_export_html` / `bookmark_import_html`)
 
 ## Architecture
 
@@ -156,18 +167,22 @@ Browser Bookmarks
 
 **`bookmark_merge_folders`** — Merge source folder into target.
 - `deduplicate` — Skip bookmarks that already exist in target (by URL)
-- `delete_source` — Remove source folder after merge
+- `delete_source` — Remove source folder after merge. When `true`, this is destructive: pass `dry_run: true` first to preview, then `confirm: true` to execute. No undo.
 
-**`bookmark_deduplicate`** — Remove duplicate bookmarks (same URL).
+**`bookmark_deduplicate`** — Remove duplicate bookmarks (same URL). Destructive, no undo.
+- `folder_id` or `scope: 'global'` — **Required.** Scopes which bookmarks are considered; omitting both is rejected so an unscoped call can't sweep the whole tree.
 - `keep` — `'first'` or `'last'`
+- `dry_run: true` — Preview the exact items that would be removed. Run `bookmark_find_duplicates` or a `dry_run` first, then `confirm: true` to execute.
 
-**`bookmark_batch_delete`** — Delete multiple bookmarks by IDs.
+**`bookmark_batch_delete`** — Delete multiple bookmarks by IDs. Destructive, no undo: `dry_run: true` to preview, `confirm: true` to execute.
+
+> Back up first with `bookmark_export_html`; `bookmark_import_html` restores it. See [Quick Start step 4](#4-back-up-before-any-cleanup).
 
 ### Export/Import
 
-**`bookmark_export_html`** — Export as Netscape Bookmark HTML format.
+**`bookmark_export_html`** — Export as Netscape Bookmark HTML format. Use this as your backup/safety net before any destructive cleanup.
 
-**`bookmark_import_html`** — Import from Netscape Bookmark HTML.
+**`bookmark_import_html`** — Import from Netscape Bookmark HTML. Restores a snapshot produced by `bookmark_export_html`.
 
 ### Analysis
 
@@ -269,7 +284,8 @@ The native-host manifest's `allowed_origins` defaults to the published Chrome We
 - No analytics, no telemetry, no external network calls
 - No data leaves your machine
 - Root folder deletion protected
-- Destructive batch operations require explicit confirmation
+- Destructive batch operations gated by `dry_run` preview and explicit `confirm: true`
+- Back up first with `bookmark_export_html`; deletes are permanent and have no undo
 - Full [Privacy Policy](privacy-policy.md)
 
 ## License

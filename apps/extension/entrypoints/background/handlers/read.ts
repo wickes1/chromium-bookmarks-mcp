@@ -1,3 +1,4 @@
+import { DEAD_LINK_DEADLINE_MS } from '@chromium-bookmarks-mcp/shared';
 import type { ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
 
 // --- Shared helpers (exported for use by batch.ts) ---
@@ -171,6 +172,44 @@ async function resolveFolderPath(path: string, rootId: string = '0'): Promise<st
   return currentId;
 }
 
+// True when `node` is `folderId` itself or lives anywhere under it. Walks the
+// parentId chain (cheap per-id chrome.bookmarks.get) instead of materializing
+// the whole subtree, and memoizes each visited id so shared ancestors among a
+// page of hits are resolved once.
+async function isWithinFolder(
+  node: chrome.bookmarks.BookmarkTreeNode,
+  folderId: string,
+  cache: Map<string, boolean>,
+): Promise<boolean> {
+  const chain: string[] = [];
+  let currentId: string | undefined = node.id;
+
+  while (currentId && currentId !== '0') {
+    if (currentId === folderId) {
+      for (const id of chain) cache.set(id, true);
+      cache.set(currentId, true);
+      return true;
+    }
+    const cached = cache.get(currentId);
+    if (cached !== undefined) {
+      for (const id of chain) cache.set(id, cached);
+      return cached;
+    }
+    chain.push(currentId);
+    let parentId: string | undefined;
+    try {
+      const nodes: chrome.bookmarks.BookmarkTreeNode[] = await chrome.bookmarks.get(currentId);
+      parentId = nodes[0]?.parentId;
+    } catch {
+      break;
+    }
+    currentId = parentId;
+  }
+
+  for (const id of chain) cache.set(id, false);
+  return false;
+}
+
 export async function handleSearch(args: Record<string, unknown>): Promise<ToolCallResponse> {
   const query = args.query as string;
   let folderId = args.folder_id as string | undefined;
@@ -188,27 +227,29 @@ export async function handleSearch(args: Record<string, unknown>): Promise<ToolC
     folderId = resolved;
   }
 
-  let results = await chrome.bookmarks.search(query);
+  const results = await chrome.bookmarks.search(query);
 
+  // Folder-scoped search: instead of materializing the whole subtree id set,
+  // walk each hit's parentId ancestry until we reach folderId (in scope) or
+  // the root (out of scope). We slice to `limit` before enrichment, so the
+  // ancestry walk only runs for the bounded set we actually return.
+  let scoped = results;
   if (folderId) {
-    const subtree = await chrome.bookmarks.getSubTree(folderId);
-    const subtreeIds = new Set<string>();
-    function collectIds(nodes: chrome.bookmarks.BookmarkTreeNode[]) {
-      for (const n of nodes) {
-        subtreeIds.add(n.id);
-        if (n.children) collectIds(n.children);
-      }
+    const inScopeCache = new Map<string, boolean>();
+    const filtered: chrome.bookmarks.BookmarkTreeNode[] = [];
+    for (const r of results) {
+      if (await isWithinFolder(r, folderId, inScopeCache)) filtered.push(r);
+      if (filtered.length >= limit) break;
     }
-    collectIds(subtree);
-    results = results.filter(r => subtreeIds.has(r.id));
+    scoped = filtered;
   }
 
-  const sliced = results.slice(0, limit);
+  const sliced = scoped.slice(0, limit);
   const enriched = await Promise.all(sliced.map(enrichNode));
 
   return {
     status: 'success',
-    data: { items: enriched, total: results.length, returned: sliced.length },
+    data: { items: enriched, total: scoped.length, returned: sliced.length },
   };
 }
 
@@ -270,10 +311,97 @@ export async function handleExportHtml(args: Record<string, unknown>): Promise<T
   return { status: 'success', data: { html, size: html.length } };
 }
 
+// Hard ceiling on URLs probed per call, independent of the caller's `limit`.
+// check_dead_links is an unauthenticated network primitive driven by stored
+// URLs (SEC-7), so the worst case is bounded regardless of the request.
+const MAX_DEAD_LINK_REQUESTS = 200;
+const DEAD_LINK_BATCH_SIZE = 5;
+
+// Block requests to loopback / private / link-local / unique-local / metadata
+// ranges so a stored bookmark URL can't be used to probe the host's internal
+// network (SSRF). This is a literal-host check: a hostname that resolves to a
+// private IP at DNS time is out of scope here (no resolver in the SW), but the
+// common SSRF vectors embed the IP/hostname directly in the URL.
+export function isBlockedHost(hostname: string): boolean {
+  let host = hostname.trim().toLowerCase();
+  if (!host) return true;
+
+  // Strip brackets from IPv6 literals like [::1].
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+  // Strip a single trailing dot: an absolute FQDN like "localhost." resolves the
+  // same as "localhost" but would otherwise bypass the equality checks (SEC-7b).
+  if (host.endsWith('.')) host = host.slice(0, -1);
+
+  // Obvious loopback / metadata hostnames.
+  if (host === 'localhost' || host === 'localhost.localdomain') return true;
+  if (host.endsWith('.localhost')) return true;
+
+  // IPv6 literals.
+  if (host.includes(':')) {
+    // Loopback ::1 (and 0:0:...:1 long forms).
+    if (host === '::1' || /^(0:){1,7}0*1$/.test(host)) return true;
+    // Unspecified ::.
+    if (host === '::' || /^0*(:0*){2,7}$/.test(host)) return true;
+    // Unique-local fc00::/7 (fc00:: – fdff::) and link-local fe80::/10.
+    if (/^f[cd][0-9a-f]{2}:/.test(host)) return true;
+    if (/^fe[89ab][0-9a-f]:/.test(host)) return true;
+    // IPv4-mapped IPv6: the WHATWG URL parser canonicalizes ::ffff:127.0.0.1 to
+    // the hex-compressed form ::ffff:7f00:1, so match hextets (not dotted-decimal)
+    // and decode them. Keep the dotted form too, and block any other ::ffff: form
+    // outright as defense in depth (SEC-7a).
+    const mappedHex = host.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (mappedHex) {
+      const hi = parseInt(mappedHex[1], 16), lo = parseInt(mappedHex[2], 16);
+      return isBlockedHost(`${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`);
+    }
+    const mappedDotted = host.match(/::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+    if (mappedDotted) return isBlockedHost(mappedDotted[1]);
+    if (host.startsWith('::ffff:')) return true;
+    return false;
+  }
+
+  // IPv4 dotted-quad literals.
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const octets = v4.slice(1, 5).map(Number);
+    if (octets.some(o => o > 255)) return true; // malformed -> block
+    const [a, b] = octets;
+    if (a === 127) return true;                       // 127.0.0.0/8 loopback
+    if (a === 10) return true;                         // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true;  // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;           // 192.168.0.0/16
+    if (a === 169 && b === 254) return true;           // 169.254.0.0/16 link-local + metadata
+    if (a === 0) return true;                          // 0.0.0.0/8
+    return false;
+  }
+
+  // Non-literal hostname: allow (can't resolve without a resolver).
+  return false;
+}
+
+// A response counts as "alive" if it succeeded or is a redirect. With
+// redirect:'manual', a cross-origin redirect surfaces as an opaque-redirect
+// response (status 0, type 'opaqueredirect'); a same-origin one keeps its 3xx.
+// Not following the redirect closes the SSRF re-target hole (SEC-7c).
+function isAliveResponse(res: Response): boolean {
+  return res.ok || res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400);
+}
+
 export async function handleCheckDeadLinks(args: Record<string, unknown>): Promise<ToolCallResponse> {
   const folderId = args.folder_id as string | undefined;
-  const limit = (args.limit as number) || 50;
+  const requestedLimit = (args.limit as number) || 50;
   const timeoutMs = (args.timeout_ms as number) || 5000;
+
+  // Derive a wall-clock deadline so the whole op finishes inside the host
+  // request budget (DEAD_LINK_DEADLINE_MS < EXTENSION_OP_TIMEOUT_MS) instead of
+  // running detached past the proxy timeout and falsely reporting a hang.
+  const deadline = Date.now() + DEAD_LINK_DEADLINE_MS;
+
+  // Cap the effective limit so the worst case (every batch taking ~timeoutMs)
+  // still fits the deadline, and never exceed the absolute request ceiling.
+  const batchesThatFit = Math.max(1, Math.floor(DEAD_LINK_DEADLINE_MS / Math.max(timeoutMs, 1)));
+  const limitByDeadline = batchesThatFit * DEAD_LINK_BATCH_SIZE;
+  const effectiveLimit = Math.min(requestedLimit, MAX_DEAD_LINK_REQUESTS, limitByDeadline);
 
   const tree = await getTreeOrSubtree(folderId);
   const allBookmarks = flattenBookmarks(tree);
@@ -281,46 +409,75 @@ export async function handleCheckDeadLinks(args: Record<string, unknown>): Promi
   // Only check bookmarks with http/https URLs
   const checkable = allBookmarks
     .filter(b => b.url && (b.url.startsWith('http://') || b.url.startsWith('https://')))
-    .slice(0, limit);
+    .slice(0, effectiveLimit);
 
   const results: Array<{
     id: string;
     title: string;
     url: string;
-    status: 'alive' | 'dead' | 'error';
+    status: 'alive' | 'dead' | 'error' | 'blocked';
     httpStatus?: number;
     error?: string;
   }> = [];
 
-  // Check in batches of 5 to avoid overwhelming the network
-  for (let i = 0; i < checkable.length; i += 5) {
-    const batch = checkable.slice(i, i + 5);
+  let timedOut = false;
+  let checkedCount = 0;
+
+  // Check in batches to avoid overwhelming the network. Stop launching new
+  // batches once we cross the deadline and return whatever completed.
+  for (let i = 0; i < checkable.length; i += DEAD_LINK_BATCH_SIZE) {
+    if (Date.now() >= deadline) {
+      timedOut = true;
+      break;
+    }
+
+    const batch = checkable.slice(i, i + DEAD_LINK_BATCH_SIZE);
     const checks = batch.map(async (bm) => {
-      const record = (status: 'alive' | 'dead' | 'error', httpStatus?: number, error?: string) =>
+      const record = (status: 'alive' | 'dead' | 'error' | 'blocked', httpStatus?: number, error?: string) =>
         results.push({ id: bm.id, title: bm.title, url: bm.url!, status, httpStatus, error });
 
+      // SSRF guard: refuse to probe private/loopback/link-local/metadata hosts.
+      let hostname: string;
       try {
-        const res = await fetch(bm.url!, {
-          method: 'HEAD',
-          signal: AbortSignal.timeout(timeoutMs),
-          redirect: 'follow',
-        });
-        record(res.ok ? 'alive' : 'dead', res.status);
+        hostname = new URL(bm.url!).hostname;
       } catch {
+        record('error', undefined, 'invalid URL');
+        return;
+      }
+      if (isBlockedHost(hostname)) {
+        record('blocked', undefined, 'blocked: private/loopback/link-local host');
+        return;
+      }
+
+      checkedCount++;
+
+      // ONE timeout budget shared across the HEAD attempt and its GET fallback,
+      // so a single bookmark can never consume more than `timeoutMs` total and
+      // we never double-fetch on a fresh budget (CORR-1/PERF-1).
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
         try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          const res = await fetch(bm.url!, {
+            method: 'HEAD',
+            signal: controller.signal,
+            redirect: 'manual',
+          });
+          record(isAliveResponse(res) ? 'alive' : 'dead', res.status);
+        } catch {
+          // Some servers reject HEAD; retry once with GET on the SAME budget.
           const res = await fetch(bm.url!, {
             method: 'GET',
             signal: controller.signal,
-            redirect: 'follow',
+            redirect: 'manual',
           });
-          clearTimeout(timer);
           res.body?.cancel();
-          record(res.ok ? 'alive' : 'dead', res.status);
-        } catch (err2) {
-          record('error', undefined, (err2 as Error).message);
+          record(isAliveResponse(res) ? 'alive' : 'dead', res.status);
         }
+      } catch (err) {
+        record('error', undefined, (err as Error).message);
+      } finally {
+        clearTimeout(timer);
       }
     });
     await Promise.all(checks);
@@ -329,16 +486,20 @@ export async function handleCheckDeadLinks(args: Record<string, unknown>): Promi
   const dead = results.filter(r => r.status === 'dead');
   const errors = results.filter(r => r.status === 'error');
   const alive = results.filter(r => r.status === 'alive');
+  const blocked = results.filter(r => r.status === 'blocked');
 
   return {
     status: 'success',
     data: {
-      checked: results.length,
+      checked: checkedCount,
       alive: alive.length,
       dead: dead.length,
       errors: errors.length,
+      blocked: blocked.length,
+      timedOut,
       deadLinks: dead,
       errorLinks: errors,
+      blockedLinks: blocked.length > 0 ? blocked : undefined,
     },
   };
 }

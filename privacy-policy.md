@@ -29,7 +29,7 @@ All bookmark data stays entirely on your local machine. The data flow is:
 
 ## Network Requests
 
-The extension makes **no external network requests** except when you explicitly use the `bookmark_check_dead_links` tool, which sends HTTP HEAD/GET requests to the URLs stored in your bookmarks to verify they are still accessible. These requests go directly to the bookmark URLs — no proxy or intermediary is used.
+The extension makes **no external network requests** except when you explicitly use the `bookmark_check_dead_links` tool, which sends HTTP HEAD/GET requests to the URLs stored in your bookmarks to verify they are still accessible. These requests go directly to the bookmark URLs — no proxy or intermediary is used. Each request carries the **full bookmark URL, including any path, query parameters, and fragment**, to the target host, exactly as a browser would when loading that page; if a stored URL contains sensitive values in its query string, those values are sent to that host during the check.
 
 ## Permissions
 

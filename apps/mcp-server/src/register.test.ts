@@ -1,12 +1,16 @@
-import { describe, expect, test, afterAll } from 'bun:test';
-import { existsSync } from 'node:fs';
+import { describe, expect, test, afterAll, afterEach, beforeEach } from 'bun:test';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   buildManifestForTest,
   PUBLISHED_EXTENSION_ID,
   ensureRegistered,
+  ensureRegisteredWith,
   register,
   getNativeHostPathForTest,
 } from './register.js';
+import { NATIVE_HOST_NAME } from './types.js';
 
 describe('buildManifest', () => {
   test('defaults allowed_origins to the published Web Store extension ID', () => {
@@ -26,9 +30,76 @@ describe('buildManifest', () => {
   });
 });
 
-describe('ensureRegistered', () => {
-  test('is exported and callable without arguments', () => {
+describe('ensureRegistered idempotency (TEST-4)', () => {
+  const filename = `${NATIVE_HOST_NAME}.json`;
+  const expectedPath = '/opt/app/bin/run_host.sh';
+  let tmp: string;
+  let browserDir: string;
+  let manifestPath: string;
+  let registerCalls: number;
+
+  function deps(overrides?: Partial<Parameters<typeof ensureRegisteredWith>[0]>) {
+    return {
+      browsers: [{ nativeHostDir: browserDir }],
+      expectedPath,
+      fileExists: existsSync,
+      readFile: (p: string) => readFileSync(p, 'utf-8'),
+      regRead: () => null,
+      doRegister: () => {
+        registerCalls += 1;
+      },
+      ...overrides,
+    };
+  }
+
+  function seedManifest(pathValue: string): void {
+    writeFileSync(manifestPath, JSON.stringify({ name: NATIVE_HOST_NAME, path: pathValue }), 'utf-8');
+  }
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), 'cbm-register-'));
+    browserDir = join(tmp, 'NativeMessagingHosts');
+    mkdirSync(browserDir, { recursive: true });
+    manifestPath = join(browserDir, filename);
+    registerCalls = 0;
+  });
+
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test('no write when the manifest is present and path is current', () => {
+    seedManifest(expectedPath);
+    ensureRegisteredWith(deps());
+    expect(registerCalls).toBe(0);
+  });
+
+  test('re-registers when the manifest is missing', () => {
+    // manifest file not created
+    ensureRegisteredWith(deps());
+    expect(registerCalls).toBe(1);
+  });
+
+  test('re-registers when the manifest path is stale', () => {
+    seedManifest('/old/stale/path/run_host.sh');
+    ensureRegisteredWith(deps());
+    expect(registerCalls).toBe(1);
+  });
+
+  test('re-registers when the manifest JSON is corrupt', () => {
+    writeFileSync(manifestPath, '{ not json', 'utf-8');
+    ensureRegisteredWith(deps());
+    expect(registerCalls).toBe(1);
+  });
+
+  test('early-returns (no register) when no browsers are detected', () => {
+    ensureRegisteredWith(deps({ browsers: [] }));
+    expect(registerCalls).toBe(0);
+  });
+
+  test('the production ensureRegistered wrapper is callable with no args', () => {
     expect(typeof ensureRegistered).toBe('function');
+    // Zero-arg public signature keeps existing callers (stdio-proxy) working.
     expect(ensureRegistered.length).toBe(0);
   });
 });

@@ -1,5 +1,6 @@
 import { ROOT_FOLDER_IDS } from '@chromium-bookmarks-mcp/shared';
 import type { ToolCallResponse } from '@chromium-bookmarks-mcp/shared';
+import { clearFolderPathCache } from './read.js';
 
 // Helper: create nested folders from a path like "Tech > AI > LLM"
 async function createFolderPath(path: string, rootId: string = '1'): Promise<string> {
@@ -30,51 +31,91 @@ export async function handleImportHtml(args: Record<string, unknown>): Promise<T
 
   let created = 0;
   let folders = 0;
+  // Track <DT>/<A> markup we saw but could not turn into a node, so a malformed
+  // export reports a real diagnostic instead of a silent "success" (CORR-3).
+  let unparsedDt = 0;
+  let unparsedAnchors = 0;
 
-  // Simple state-machine parser for Netscape Bookmark HTML
+  // Folder open is an <H3>; the folder's content is delimited by a following
+  // <DL> ... </DL>. We push on <H3> and pop on </DL>. <DL> opens are no-ops
+  // because the folder was already pushed by its <H3>. Tokens are matched
+  // anywhere on the line (not anchored to line start) so one-line / minified
+  // exports that pack <H3><DL>...</DL> together still balance correctly.
   const lines = html.split('\n');
   const folderStack: string[] = [targetId];
 
-  for (const line of lines) {
-    const trimmed = line.trim();
+  // Quote- and attribute-order-tolerant matchers.
+  //  - HREF may be single- or double-quoted and may follow other attributes.
+  //  - </DL> is counted by occurrence, anywhere on the line.
+  const h3Re = /<H3\b[^>]*>([\s\S]*?)<\/H3>/i;
+  const anchorRe = /<A\b[^>]*\bHREF\s*=\s*("([^"]*)"|'([^']*)'|([^\s">]+))[^>]*>([\s\S]*?)<\/A>/i;
+  // Single scanning regex applied left-to-right so multiple tokens on one line
+  // are handled in document order.
+  const tokenRe = /<H3\b[^>]*>[\s\S]*?<\/H3>|<A\b[^>]*>[\s\S]*?<\/A>|<\/DL>/gi;
 
-    // Folder start: <DT><H3 ...>Title</H3>
-    const folderMatch = trimmed.match(/<DT><H3[^>]*>(.*?)<\/H3>/i);
-    if (folderMatch) {
-      const title = decodeHtmlEntities(folderMatch[1]);
-      const folder = await chrome.bookmarks.create({
-        parentId: folderStack[folderStack.length - 1],
-        title,
-      });
-      folderStack.push(folder.id);
-      folders++;
-      continue;
+  for (const rawLine of lines) {
+    const line = rawLine;
+    const hasDt = /<DT\b/i.test(line);
+    let matchedSomething = false;
+
+    tokenRe.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = tokenRe.exec(line)) !== null) {
+      const token = m[0];
+
+      if (/^<\/DL>/i.test(token)) {
+        if (folderStack.length > 1) folderStack.pop();
+        continue;
+      }
+
+      if (/^<H3\b/i.test(token)) {
+        const h3 = token.match(h3Re);
+        const title = decodeHtmlEntities(h3 ? h3[1] : '');
+        const folder = await chrome.bookmarks.create({
+          parentId: folderStack[folderStack.length - 1],
+          title,
+        });
+        folderStack.push(folder.id);
+        folders++;
+        matchedSomething = true;
+        continue;
+      }
+
+      // Anchor (bookmark).
+      const a = token.match(anchorRe);
+      if (a) {
+        const rawHref = a[2] ?? a[3] ?? a[4] ?? '';
+        const url = decodeHtmlEntities(rawHref);
+        const title = decodeHtmlEntities(a[5] ?? '');
+        await chrome.bookmarks.create({
+          parentId: folderStack[folderStack.length - 1],
+          title,
+          url,
+        });
+        created++;
+        matchedSomething = true;
+      } else {
+        // An <A>...</A> we matched structurally but couldn't extract an HREF
+        // from (e.g. javascript: stripped, or no HREF attribute).
+        unparsedAnchors++;
+      }
     }
 
-    // DL start — folder contents begin (folder was already pushed)
-    if (trimmed.match(/^<DL>/i)) continue;
-
-    // DL end — folder contents end, pop folder stack
-    if (trimmed.match(/^<\/DL>/i)) {
-      if (folderStack.length > 1) folderStack.pop();
-      continue;
-    }
-
-    // Bookmark: <DT><A HREF="..." ...>Title</A>
-    const bookmarkMatch = trimmed.match(/<DT><A\s+HREF="([^"]*)"[^>]*>(.*?)<\/A>/i);
-    if (bookmarkMatch) {
-      const url = decodeHtmlEntities(bookmarkMatch[1]);
-      const title = decodeHtmlEntities(bookmarkMatch[2]);
-      await chrome.bookmarks.create({
-        parentId: folderStack[folderStack.length - 1],
-        title,
-        url,
-      });
-      created++;
+    // A line carrying a <DT> that produced no folder/bookmark is markup we
+    // failed to parse — surface it rather than dropping it silently.
+    if (hasDt && !matchedSomething) {
+      unparsedDt++;
+      if (/<A\b/i.test(line)) unparsedAnchors++;
     }
   }
 
-  return { status: 'success', data: { created, folders } };
+  const data: Record<string, unknown> = { created, folders };
+  if (unparsedDt > 0) data.unparsedDtLines = unparsedDt;
+  if (unparsedAnchors > 0) data.unparsedAnchorLines = unparsedAnchors;
+
+  // Created folders/bookmarks may shift folder paths — drop the stale cache.
+  clearFolderPathCache();
+  return { status: 'success', data };
 }
 
 function decodeHtmlEntities(str: string): string {
@@ -114,6 +155,7 @@ export async function handleCreate(args: Record<string, unknown>): Promise<ToolC
   };
 
   const created = await chrome.bookmarks.create(details);
+  clearFolderPathCache();
   return { status: 'success', data: created };
 }
 
@@ -137,6 +179,7 @@ export async function handleUpdate(args: Record<string, unknown>): Promise<ToolC
 
   try {
     const updated = await chrome.bookmarks.update(id, changes);
+    clearFolderPathCache();
     return { status: 'success', data: updated };
   } catch {
     return { status: 'error', error: `Bookmark not found: ${id}` };
@@ -160,6 +203,7 @@ export async function handleMove(args: Record<string, unknown>): Promise<ToolCal
     const destination: { parentId?: string; index?: number } = { parentId };
     if (index !== undefined) destination.index = index;
     const moved = await chrome.bookmarks.move(id, destination);
+    clearFolderPathCache();
     return { status: 'success', data: moved };
   } catch (err) {
     return { status: 'error', error: (err as Error).message };
@@ -183,6 +227,7 @@ export async function handleDelete(args: Record<string, unknown>): Promise<ToolC
     const nodes = await chrome.bookmarks.get(id);
     const node = nodes[0];
     await chrome.bookmarks.remove(id);
+    clearFolderPathCache();
     return { status: 'success', data: { deleted: node } };
   } catch {
     return { status: 'error', error: `Bookmark not found: ${id}` };
@@ -221,6 +266,7 @@ export async function handleDeleteFolder(args: Record<string, unknown>): Promise
 
     const folderTitle = subtree[0]?.title;
     await chrome.bookmarks.removeTree(id);
+    clearFolderPathCache();
     return { status: 'success', data: { deletedFolder: folderTitle, deletedItems: count } };
   } catch (err) {
     return { status: 'error', error: (err as Error).message };

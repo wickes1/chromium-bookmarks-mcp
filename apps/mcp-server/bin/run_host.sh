@@ -9,4 +9,10 @@ if [ ! -x "$BUN" ]; then
   BUN="$(command -v bun 2>/dev/null || echo bun)"
 fi
 
-exec "$BUN" run "$DIR/src/native-host.ts" "$@"
+# Prefer the built artifact (published tarball ships dist/), fall back to source (dev).
+HOST="$DIR/dist/native-host.js"
+if [ ! -f "$HOST" ]; then
+  HOST="$DIR/src/native-host.ts"
+fi
+
+exec "$BUN" run "$HOST" "$@"

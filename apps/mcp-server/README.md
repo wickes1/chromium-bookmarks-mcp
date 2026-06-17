@@ -45,13 +45,13 @@ Or in `claude_desktop_config.json` / Cursor / Windsurf:
 }
 ```
 
-The server auto-registers itself as a native messaging host on first run (including Windows registry keys). No manual setup.
+The server auto-registers itself as a native messaging host the first time your MCP client starts the stdio proxy (not at install time), including the Windows registry keys. It is idempotent and re-runs on every startup. No manual setup.
 
 **4. Open your browser, click the extension icon to activate**, then ask your agent: *"Use the ping tool to check if bookmarks MCP is connected."*
 
 ## What you get
 
-**20 MCP tools** covering read, write, batch, export/import, and dead-link analysis — full list and tool reference on [GitHub](https://github.com/Wickes1/chromium-bookmarks-mcp#features).
+**19 MCP tools** covering read, write, batch, export/import, and dead-link analysis — full list and tool reference on [GitHub](https://github.com/Wickes1/chromium-bookmarks-mcp#features).
 
 ## CLI
 

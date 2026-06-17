@@ -20,24 +20,30 @@
     "browser-extension",
     "claude"
   ],
+  "engines": {
+    "bun": ">=1.2.0"
+  },
   "bin": {
-    "chromium-bookmarks-mcp": "src/index.ts"
+    "chromium-bookmarks-mcp": "dist/index.js"
   },
   "files": [
-    "src/**/*.ts",
-    "!src/**/*.test.ts",
+    "dist/**",
     "bin/**",
-    "package.json"
+    "package.json",
+    "LICENSE",
+    "README.md"
   ],
   "scripts": {
-    "postinstall": "bun run src/index.ts register || true"
+    "build": "bun build src/index.ts src/native-host.ts --target=bun --outdir=dist --external @modelcontextprotocol/sdk --external zod",
+    "prepublishOnly": "bun run build"
   },
   "dependencies": {
+    "@chromium-bookmarks-mcp/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "bun-types": "latest",
+    "bun-types": "^1.2.0",
     "typescript": "^5.8.0"
   }
 }

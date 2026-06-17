@@ -6,28 +6,117 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { DEFAULT_PORT } from './types.js';
+import { readFileSync } from 'node:fs';
+import { DEFAULT_PORT, AUTH_TOKEN_HEADER, authTokenPath } from './types.js';
 import type { ToolCallResponse } from './types.js';
 import pkg from '../package.json';
 import { ensureRegistered } from './register.js';
 
 const HTTP_BASE = `http://127.0.0.1:${DEFAULT_PORT}`;
 const VERSION: string = pkg.version;
+// Pretty-print tool output only when explicitly requested; compact JSON keeps
+// payloads (and token cost) small for the common case (PERF-5).
+const DEBUG_JSON = process.env.BOOKMARKS_MCP_DEBUG === '1';
 
-async function callNativeHost(toolName: string, args: Record<string, unknown>): Promise<ToolCallResponse> {
-  const res = await fetch(`${HTTP_BASE}/call-tool`, {
+/**
+ * Error thrown for an HTTP-layer failure that is NOT a fetch/connection
+ * rejection — i.e. the host answered with a non-OK, non-JSON response. Kept
+ * distinct from fetch rejections so error classification stays structural
+ * (ARCH-3) instead of substring-based.
+ */
+export class HttpError extends Error {
+  readonly status: number;
+  constructor(status: number, statusText: string) {
+    super(`HTTP ${status}: ${statusText}`);
+    this.name = 'HttpError';
+    this.status = status;
+  }
+}
+
+/**
+ * Structurally classify a thrown error as "extension/host not reachable"
+ * (ARCH-3). A fetch to a down localhost rejects with a TypeError whose `cause`
+ * carries the OS error code; an aborted/timed-out fetch rejects with
+ * TimeoutError/AbortError. Anything that is one of our own HttpErrors is a real
+ * HTTP response and must NOT be treated as a connection failure.
+ */
+export function isNotConnectedError(err: unknown): boolean {
+  if (err instanceof HttpError) return false;
+  if (!(err instanceof Error)) return true; // non-Error rejection from fetch -> treat as down
+  if (err.name === 'TimeoutError' || err.name === 'AbortError') return true;
+  const code = (err as { cause?: { code?: string } }).cause?.code;
+  if (code) {
+    // Any connection-establishment / socket failure to 127.0.0.1 means the
+    // native host is not running. Enumerated for clarity; the default below
+    // also covers it, since every fetch-layer rejection to a dead localhost is
+    // NOT_CONNECTED.
+    return true;
+  }
+  // A bare fetch rejection ("fetch failed" TypeError) without a cause code is
+  // still a transport failure to the local host.
+  return err.name === 'TypeError';
+}
+
+const STATUS_CODE_MAP: Record<number, string> = {
+  400: 'BAD_REQUEST',
+  401: 'UNAUTHORIZED',
+  503: 'BACKPRESSURE',
+};
+
+/**
+ * Unwrap the JSON body of ANY non-OK response so host-side errors (400 bad
+ * request, 401 unauthorized, 500 tool error, 503 backpressure) reach the caller
+ * as a clean tool error carrying a `code` (CORR-6). If the response is not
+ * application/json, throw an HttpError so the caller emits a generic message.
+ */
+export async function unwrapNonOkBody(res: Response): Promise<ToolCallResponse> {
+  const contentType = res.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    const body = await res.json() as ToolCallResponse;
+    return {
+      ...body,
+      // A non-OK response is always surfaced as an error to the caller.
+      status: 'error',
+      // Preserve a host-supplied code, else derive one from the status.
+      code: body.code ?? STATUS_CODE_MAP[res.status] ?? 'TOOL_ERROR',
+    };
+  }
+  throw new HttpError(res.status, res.statusText);
+}
+
+/** Read the per-session auth token written by the native host (SEC-1). */
+function readAuthToken(): string | null {
+  try {
+    return readFileSync(authTokenPath(), 'utf-8').trim() || null;
+  } catch {
+    // Token file may not exist yet (host not started) — proceed unauthenticated
+    // and let the host's 401 drive the retry.
+    return null;
+  }
+}
+
+async function fetchCallTool(toolName: string, args: Record<string, unknown>, token: string | null): Promise<Response> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) headers[AUTH_TOKEN_HEADER] = token;
+  return fetch(`${HTTP_BASE}/call-tool`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ toolName, args }),
     signal: AbortSignal.timeout(35_000),
   });
+}
+
+export async function callNativeHost(toolName: string, args: Record<string, unknown>): Promise<ToolCallResponse> {
+  let res = await fetchCallTool(toolName, args, readAuthToken());
+
+  // On 401, the token file may have been (re)written after we read it — re-read
+  // once and retry (SEC-1). If still 401, fall through to unwrap as an error.
+  if (res.status === 401) {
+    res = await fetchCallTool(toolName, args, readAuthToken());
+  }
 
   if (!res.ok) {
-    if (res.status === 500) {
-      const body = await res.json() as ToolCallResponse;
-      return body;
-    }
-    throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    return unwrapNonOkBody(res);
   }
 
   return res.json() as Promise<ToolCallResponse>;
@@ -57,15 +146,15 @@ export async function startStdioProxy(): Promise<void> {
       try {
         const result = await callNativeHost(name, args as Record<string, unknown>);
         if (result.status === 'error') {
-          return { content: [{ type: 'text' as const, text: `Error: ${result.error}` }], isError: true };
+          const code = result.code ? ` [${result.code}]` : '';
+          return { content: [{ type: 'text' as const, text: `Error${code}: ${result.error}` }], isError: true };
         }
-        return { content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, 2) }] };
+        return { content: [{ type: 'text' as const, text: JSON.stringify(result.data, null, DEBUG_JSON ? 2 : undefined) }] };
       } catch (err) {
-        const msg = (err as Error).message;
-        if (msg.includes('ECONNREFUSED') || msg.includes('fetch failed') || msg.includes('TimeoutError')) {
-          return { content: [{ type: 'text' as const, text: NOT_CONNECTED_MSG }], isError: true };
+        if (isNotConnectedError(err)) {
+          return { content: [{ type: 'text' as const, text: `${NOT_CONNECTED_MSG} [NOT_CONNECTED]` }], isError: true };
         }
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return { content: [{ type: 'text' as const, text: `Error: ${(err as Error).message}` }], isError: true };
       }
     });
   }
@@ -183,7 +272,7 @@ export async function startStdioProxy(): Promise<void> {
   registerProxyTool(
     'bookmark_delete_folder',
     'Delete Folder',
-    'Delete a folder and ALL its contents. Requires confirm: true as a safety gate.',
+    'Delete a folder and ALL its contents. Requires confirm: true as a safety gate. Permanently deletes the folder and every bookmark inside it, with no undo. Back up first with bookmark_export_html.',
     z.object({
       id: z.string().describe('Folder ID to delete.'),
       confirm: z.boolean().describe('Must be true to confirm deletion of folder and all contents.'),
@@ -204,31 +293,38 @@ export async function startStdioProxy(): Promise<void> {
   registerProxyTool(
     'bookmark_merge_folders',
     'Merge Folders',
-    'Merge all contents of source folder into target folder. Optionally deduplicate and delete source.',
+    'Merge all contents of source folder into target folder. Optionally deduplicate and delete source. When delete_source is true, or deduplicate removes duplicates, this permanently deletes bookmarks, with no undo: call with dry_run:true first to preview what would be removed, then confirm:true to execute. Back up first with bookmark_export_html.',
     z.object({
       source_id: z.string().describe('Source folder ID to merge from.'),
       target_id: z.string().describe('Target folder ID to merge into.'),
       delete_source: z.boolean().optional().describe('Delete source folder after merge. Default: false.'),
       deduplicate: z.boolean().optional().describe('Skip moving bookmarks that already exist in target (by URL). Default: false.'),
+      confirm: z.boolean().optional().describe('Required (with dry_run unset/false) to actually delete the source folder and/or duplicate bookmarks.'),
+      dry_run: z.boolean().optional().describe('Preview only: report what would be removed without deleting anything.'),
     }),
   );
 
   registerProxyTool(
     'bookmark_deduplicate',
     'Deduplicate Bookmarks',
-    'Find and remove duplicate bookmarks (same URL) within a folder or globally.',
+    'Find and remove duplicate bookmarks (same URL) within a folder or globally. Permanently deletes the redundant copies, with no undo: call with dry_run:true first to preview which bookmarks would be removed, then confirm:true to execute. You must pass folder_id or scope:"global" so an omitted scope can never wipe the whole tree. Back up first with bookmark_export_html.',
     z.object({
-      folder_id: z.string().optional().describe('Scope to a specific folder. Omit for global dedup.'),
+      folder_id: z.string().optional().describe('Scope to a specific folder. Required unless scope:"global" is set.'),
+      scope: z.enum(['global']).optional().describe('Set to "global" to deduplicate across the entire bookmark tree. Required when folder_id is omitted.'),
       keep: z.enum(['first', 'last']).optional().describe('Which duplicate to keep. Default: first.'),
+      confirm: z.boolean().optional().describe('Required (with dry_run unset/false) to actually delete the duplicates.'),
+      dry_run: z.boolean().optional().describe('Preview only: report which duplicates would be removed without deleting anything.'),
     }),
   );
 
   registerProxyTool(
     'bookmark_batch_delete',
     'Batch Delete Bookmarks',
-    'Delete multiple bookmarks by their IDs. Cannot delete root folders.',
+    'Delete multiple bookmarks by their IDs. Cannot delete root folders. Permanently deletes the listed bookmarks, with no undo: call with dry_run:true first to preview the items, then confirm:true to execute. Back up first with bookmark_export_html.',
     z.object({
       ids: z.array(z.string()).describe('Array of bookmark IDs to delete.'),
+      confirm: z.boolean().optional().describe('Required (with dry_run unset/false) to actually delete the bookmarks.'),
+      dry_run: z.boolean().optional().describe('Preview only: report which bookmarks would be removed without deleting anything.'),
     }),
   );
 

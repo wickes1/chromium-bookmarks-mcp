@@ -1,4 +1,11 @@
 #!/usr/bin/env bun
+if (typeof Bun === 'undefined') {
+  process.stderr.write(
+    'chromium-bookmarks-mcp requires Bun (https://bun.sh). Run with bunx, not npx.\n'
+  );
+  process.exit(1);
+}
+
 import { register, unregister, doctor } from './register.js';
 import { startStdioProxy } from './stdio-proxy.js';
 
@@ -31,10 +38,11 @@ async function main() {
       console.log(`Usage: chromium-bookmarks-mcp [command]
 
 Commands:
-  (none)       Start MCP stdio proxy (default)
-  register     Register native host for all detected browsers
-  unregister   Remove native host registration
-  doctor       Diagnose connection issues
+  (none)                   Start MCP stdio proxy (default)
+  register [extension-id]  Register native host for all detected browsers
+                           (optional extension-id overrides the published ID)
+  unregister               Remove native host registration
+  doctor                   Diagnose connection issues
 `);
   }
 }

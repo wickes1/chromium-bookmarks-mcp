@@ -15,6 +15,7 @@ Thumbs.db
 # Env
 .env
 .env.*
+!.env.example
 
 # Build artifacts
 *.zip
@@ -22,3 +23,4 @@ Thumbs.db
 
 # Internal dev docs (specs, plans, reviews, TODOs) — do not ship
 docs/
+CODE_REVIEW.md

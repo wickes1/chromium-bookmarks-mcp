@@ -26,15 +26,45 @@ function runReg(args: string[]): string {
 }
 
 /**
- * reg.exe exits with status 1 when the key does not exist, regardless of
- * locale. Detect that case so callers can treat it as "no key" instead of
- * a hard error. Falls back to a regex on the localized message just in
- * case some shell wrapper swallows the exit code.
+ * reg.exe exits with status 1 when the key does not exist. Access-denied and
+ * other hard failures must NOT be misread as "no key", or a real registry
+ * problem gets silently swallowed as null. So we require BOTH a status-1 exit
+ * AND a message that does not look like an access/permission failure, and we
+ * also accept a localized not-found message on its own in case a shell wrapper
+ * swallowed the exit code. Exported for unit testing with captured fixtures.
  */
-function isKeyNotFoundError(err: unknown): boolean {
+export function isKeyNotFoundError(err: unknown): boolean {
   const e = err as ExecError;
+  const msg = e.message ?? '';
+  // Access-denied is its own failure class, never "not found".
+  if (/access is denied|access denied|permission denied|拒绝访问|拒絕存取/i.test(msg)) {
+    return false;
+  }
+  const looksLikeNotFound =
+    /unable to find|cannot find|not find|does not exist|找不到/i.test(msg);
   if (e.status === 1) return true;
-  return /unable to find|cannot find|not find|does not exist|找不到/i.test(e.message ?? '');
+  return looksLikeNotFound;
+}
+
+/**
+ * Parse the (Default) value out of `reg query <key> /ve` stdout.
+ *
+ * Output looks like (CRLF line endings, value column is whitespace-padded):
+ *   <CRLF>
+ *   <key>
+ *       (Default)    REG_SZ    C:\Program Files\path with spaces\manifest.json
+ *   <CRLF>
+ *
+ * Greedy-capture everything after the `REG_SZ` column to the end of the line so
+ * paths containing spaces survive intact, then trim a trailing CR/whitespace.
+ * Returns null when no (Default) REG_SZ row is present. Exported for testing.
+ */
+export function parseRegQueryDefault(stdout: string): string | null {
+  const match = stdout.match(/\(Default\)\s+REG_SZ\s+(.+)$/m);
+  if (!match) return null;
+  // `.+$` with multiline stops at \n but keeps a trailing \r; strip it + any
+  // trailing padding the value column may carry.
+  return match[1].replace(/[\s﻿]+$/, '');
 }
 
 /** Set the (Default) value of a registry key to the given string. Creates the key if missing. */
@@ -52,17 +82,15 @@ export function regDelete(keyPath: string): void {
   }
 }
 
-/** Read the (Default) value of a key, or return null if the key doesn't exist. */
+/**
+ * Read the (Default) value of a key. Returns null only when the key genuinely
+ * does not exist; any other failure (e.g. access denied) is re-thrown so it is
+ * not silently swallowed as a missing key.
+ */
 export function regQuery(keyPath: string): string | null {
   try {
     const out = runReg(['query', keyPath, '/ve']);
-    // Output looks like:
-    //   <CRLF>
-    //   <key>
-    //       (Default)    REG_SZ    C:\path\to\manifest.json
-    //   <CRLF>
-    const match = out.match(/\(Default\)\s+REG_SZ\s+(.+?)\s*$/m);
-    return match ? match[1] : null;
+    return parseRegQueryDefault(out);
   } catch (err) {
     if (isKeyNotFoundError(err)) return null;
     throw err;
