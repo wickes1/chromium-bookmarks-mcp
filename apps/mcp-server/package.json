@@ -38,11 +38,11 @@
     "prepublishOnly": "bun run build"
   },
   "dependencies": {
-    "@chromium-bookmarks-mcp/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@chromium-bookmarks-mcp/shared": "workspace:*",
     "bun-types": "^1.2.0",
     "typescript": "^5.8.0"
   }

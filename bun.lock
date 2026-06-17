@@ -6,7 +6,7 @@
     },
     "apps/extension": {
       "name": "@chromium-bookmarks-mcp/extension",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "dependencies": {
         "@chromium-bookmarks-mcp/shared": "workspace:*",
       },
@@ -18,23 +18,23 @@
     },
     "apps/mcp-server": {
       "name": "chromium-bookmarks-mcp",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "bin": {
         "chromium-bookmarks-mcp": "dist/index.js",
       },
       "dependencies": {
-        "@chromium-bookmarks-mcp/shared": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "zod": "^3.24.0",
       },
       "devDependencies": {
+        "@chromium-bookmarks-mcp/shared": "workspace:*",
         "bun-types": "^1.2.0",
         "typescript": "^5.8.0",
       },
     },
     "packages/shared": {
       "name": "@chromium-bookmarks-mcp/shared",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "devDependencies": {
         "@types/node": "^22.0.0",
         "typescript": "^5.8.0",
