@@ -18,7 +18,7 @@
     },
     "apps/mcp-server": {
       "name": "chromium-bookmarks-mcp",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "bin": {
         "chromium-bookmarks-mcp": "dist/index.js",
       },
