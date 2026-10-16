@@ -2,6 +2,8 @@
   "extends": "./.wxt/tsconfig.json",
   "include": ["entrypoints", "*.ts", ".wxt/types/**/*.d.ts"],
   "compilerOptions": {
-    "types": ["chrome"]
+    "types": ["chrome"],
+    // wxt 0.21's generated base turns this on; the handlers were written without it.
+    "noUncheckedIndexedAccess": false
   }
 }
