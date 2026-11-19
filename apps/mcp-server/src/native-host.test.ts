@@ -6,7 +6,11 @@ import {
   type CallToolDeps,
   type PendingRequest,
 } from './native-host.js';
-import { DEFAULT_PORT, EXTENSION_OP_TIMEOUT_MS } from './types.js';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { encodeNativeMessage } from './native-protocol.js';
+import { AUTH_TOKEN_HEADER, DEFAULT_PORT, EXTENSION_OP_TIMEOUT_MS, NativeMessageType } from './types.js';
 import type { ToolCallResponse } from './types.js';
 
 const TOKEN = 'test-token-abc';
@@ -217,4 +221,71 @@ describe('dispatchToolCall lifecycle (TEST-2)', () => {
       expect(EXTENSION_OP_TIMEOUT_MS).toBe(25_000);
     });
   });
+});
+
+describe('token file with two hosts on one port (SEC-1)', () => {
+  // Two browsers running the extension, or a reconnect racing a live host, each
+  // spawn a native host. The proxy reads the token from one shared file, so only
+  // the host serving the port may write it. When the deferring host overwrote it,
+  // every proxy call failed with 401 until the live host was restarted.
+  test('a host that defers to a running instance leaves the token file usable', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'bm-host-'));
+    const tokenFile = join(home, '.cache', 'chromium-bookmarks-mcp', 'auth-token');
+    const probe = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response() });
+    const port = probe.port;
+    probe.stop(true);
+
+    const spawnHost = () => {
+      const host = Bun.spawn([process.execPath, 'run', join(import.meta.dir, 'native-host.ts')], {
+        env: { ...process.env, HOME: home, USERPROFILE: home },
+        stdin: 'pipe',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      host.stdin.write(encodeNativeMessage({ type: NativeMessageType.START, requestId: 'start', payload: { port } }));
+      host.stdin.flush();
+      return host;
+    };
+
+    const waitForLog = async (stream: ReadableStream<Uint8Array>, needle: string) => {
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
+      let seen = '';
+      try {
+        while (!seen.includes(needle)) {
+          const { value, done } = await reader.read();
+          if (done) throw new Error(`host exited before logging "${needle}":\n${seen}`);
+          seen += decoder.decode(value, { stream: true });
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    };
+
+    // The proxy's view: send whatever token the file holds. A bad body gets past
+    // auth and fails fast as 400 without waiting on an extension; 401 means the
+    // file's token is not the one the live server issued.
+    const callWithFileToken = () =>
+      fetch(`http://127.0.0.1:${port}/call-tool`, {
+        method: 'POST',
+        headers: { [AUTH_TOKEN_HEADER]: readFileSync(tokenFile, 'utf-8').trim() },
+        body: 'not json',
+      }).then((res) => res.status);
+
+    const first = spawnHost();
+    let deferring: ReturnType<typeof spawnHost> | undefined;
+    try {
+      await waitForLog(first.stderr, 'HTTP server listening');
+      expect(await callWithFileToken()).toBe(400);
+
+      deferring = spawnHost();
+      await waitForLog(deferring.stderr, 'deferring to it');
+      expect(await callWithFileToken()).toBe(400);
+    } finally {
+      first.kill();
+      deferring?.kill();
+      await Promise.all([first.exited, deferring?.exited]);
+      rmSync(home, { recursive: true, force: true });
+    }
+  }, 15_000);
 });

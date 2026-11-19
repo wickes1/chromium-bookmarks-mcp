@@ -158,8 +158,9 @@ function callExtensionTool(toolName: string, args: Record<string, unknown>): Pro
 }
 
 // --- Auth (SEC-1) ---
-// Generate a per-session token and persist it 0600 before the HTTP server binds,
-// so the proxy can only ever read a token the host already trusts.
+// Generate a per-session token and persist it 0600. Called only by the host that
+// owns the port (see startHttpServer), so the file always holds the token of the
+// server the proxy will reach.
 export function initAuthToken(): string {
   authToken = crypto.randomUUID();
   const tokenPath = authTokenPath();
@@ -333,6 +334,13 @@ function startHttpServer(config?: { port?: number }): void {
     return;
   }
 
+  // Write the token only now that this process owns the port. A host that defers
+  // to a running instance must leave the file alone: overwriting it hands the
+  // proxy a token the live server never issued, and every call fails with 401.
+  // Bun.serve() binds synchronously, so no request is handled before this runs;
+  // until then the empty token makes handleCallTool reject everything.
+  initAuthToken();
+
   sendToExtension({
     type: NativeMessageType.SERVER_STARTED,
     requestId: crypto.randomUUID(),
@@ -343,11 +351,8 @@ function startHttpServer(config?: { port?: number }): void {
 }
 
 // --- Entrypoint ---
-// Only run side effects (token generation, stdin wiring) when executed directly
-// as the native host; staying inert on import keeps the module unit-testable.
+// Only run side effects (stdin wiring) when executed directly as the native
+// host; staying inert on import keeps the module unit-testable.
 if (import.meta.main) {
-  // Generate the auth token up front, before any START can spin up the server,
-  // so /call-tool is never reachable without a valid token (SEC-1).
-  initAuthToken();
   startNativeMessaging();
 }
